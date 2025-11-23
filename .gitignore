@@ -1,0 +1,13 @@
+# Chặn thư viện rác (QUAN TRỌNG)
+node_modules/
+**/node_modules/
+
+# Chặn file môi trường và build
+.env
+**/build/
+
+# Chặn file khóa bảo mật (CỰC QUAN TRỌNG)
+*.json
+!package.json
+!package-lock.json
+!cors.json
