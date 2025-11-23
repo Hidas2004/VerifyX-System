@@ -1,0 +1,248 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'package:dio/dio.dart'; // [MỚI] Thêm thư viện Dio
+import '../models/product_model.dart';
+
+/// ═══════════════════════════════════════════════════════════════════════════
+/// PRODUCT SERVICE - Quản lý sản phẩm (API Node.js + Firestore Read)
+/// ═══════════════════════════════════════════════════════════════════════════
+class ProductService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final Dio _dio = Dio(); // [MỚI] Khởi tạo Dio
+
+  // --- [MỚI] LOGIC TỰ ĐỘNG CHỌN IP ---
+  String get _baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:3000/api';
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:3000/api';
+    } else {
+      return 'http://localhost:3000/api';
+    }
+  }
+
+  // ==================== [MỚI] TẠO SẢN PHẨM QUA API ====================
+  
+  /// Gọi API sang Node.js để tạo sản phẩm và ghi vào Blockchain
+  Future<bool> createProductApi({
+    required String brandId,
+    required String brandName,
+    required String serialNumber,
+    required String name,
+    required String description,
+    required String ingredients, // [MỚI]
+    required String category,
+    required String batchId,      // Firebase Batch ID
+    required int blockchainBatchId, // Blockchain Batch ID
+    required DateTime manufacturingDate,
+    required DateTime expiryDate,
+    String? imageUrl,
+  }) async {
+    try {
+      final body = {
+        "brandId": brandId,
+        "brandName": brandName,
+        "serialNumber": serialNumber,
+        "name": name,
+        "category": category,
+        "description": description,
+        "ingredients": ingredients,
+        "batchId": batchId,
+        "blockchainBatchId": blockchainBatchId,
+        "manufacturingDate": manufacturingDate.toIso8601String(),
+        "expiryDate": expiryDate.toIso8601String(),
+        "imageUrl": imageUrl,
+      };
+
+      debugPrint('🚀 [ProductService] Creating product: $name in Batch: $blockchainBatchId');
+
+      final response = await _dio.post(
+        '$_baseUrl/product/create',
+        data: body,
+        options: Options(headers: {'Content-Type': 'application/json'}),
+      );
+
+      if (response.statusCode == 201 && response.data['success'] == true) {
+        debugPrint('✅ Tạo sản phẩm thành công: ${response.data['productId']}');
+        return true;
+      } else {
+        debugPrint('❌ Lỗi server: ${response.data}');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('❌ Lỗi kết nối API Product: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== XÁC THỰC SẢN PHẨM (Giữ nguyên) ====================
+
+  /// Xác thực sản phẩm bằng mã seri (CHỈ TÌM TRONG FIREBASE)
+  Future<ProductModel?> verifyBySerial(String serialNumber) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('products')
+          .where('serialNumber', isEqualTo: serialNumber)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        return null;
+      }
+
+      return ProductModel.fromFirestore(querySnapshot.docs.first);
+    } catch (e) {
+      debugPrint('❌ Error verifying product: $e');
+      return null;
+    }
+  }
+  
+  /// Xác thực sản phẩm bằng QR code
+  Future<ProductModel?> verifyByQRCode(String qrCode) async {
+    try {
+      // QR code chứa serial number
+      final serialNumber = _extractSerialFromQR(qrCode);
+      return await verifyBySerial(serialNumber);
+    } catch (e) {
+      debugPrint('❌ Error verifying by QR: $e');
+      return null;
+    }
+  }
+
+  // ==================== CẬP NHẬT (Giữ nguyên) ====================
+  
+  /// Cập nhật thông tin sản phẩm
+  Future<void> updateProduct(String productId, Map<String, dynamic> data) async {
+    try {
+      data['updatedAt'] = FieldValue.serverTimestamp();
+      await _firestore.collection('products').doc(productId).update(data);
+      
+      debugPrint('✅ Product updated: $productId');
+    } catch (e) {
+      debugPrint('❌ Error updating product: $e');
+      rethrow;
+    }
+  }
+  
+  /// Tăng số lần verification
+  Future<void> incrementVerificationCount(
+    String productId,
+    String userId,
+  ) async {
+    try {
+      await _firestore.collection('products').doc(productId).update({
+        'verificationCount': FieldValue.increment(1),
+        'lastVerification': FieldValue.serverTimestamp(),
+        'verificationHistory': FieldValue.arrayUnion([userId]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('❌ Error incrementing verification: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== QUERY (Giữ nguyên) ====================
+  
+  /// Lấy sản phẩm của brand
+  Future<List<ProductModel>> getProductsByBrand(String brandId) async {
+    try {
+    final querySnapshot = await _firestore
+      .collection('products')
+      .where('brandId', isEqualTo: brandId)
+      .get();
+
+    final products = querySnapshot.docs
+      .map((doc) => ProductModel.fromFirestore(doc))
+      .toList();
+
+    // Sort locally by createdAt to avoid Firestore composite index requirement
+    products.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return products;
+    } catch (e) {
+      debugPrint('❌ Error getting products: $e');
+      return [];
+    }
+  }
+  
+  /// Tìm kiếm sản phẩm
+  Future<List<ProductModel>> searchProducts(String query) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('products')
+          .where('name', isGreaterThanOrEqualTo: query)
+          .where('name', isLessThan: '${query}z')
+          .limit(20)
+          .get();
+          
+      return querySnapshot.docs
+          .map((doc) => ProductModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      debugPrint('❌ Error searching products: $e');
+      return [];
+    }
+  }
+
+  // ==================== BLOCKCHAIN HELPERS (Giữ nguyên) ====================
+  
+  /// Generate QR code
+  String _generateQRCode(String serialNumber) {
+    return 'VERIFYX://SERIAL/$serialNumber';
+  }
+  
+  /// Extract serial from QR
+  String _extractSerialFromQR(String qrCode) {
+    if (qrCode.startsWith('VERIFYX://SERIAL/')) {
+      return qrCode.replaceFirst('VERIFYX://SERIAL/', '');
+    }
+    return qrCode;
+  }
+  
+  /// Generate blockchain hash (SHA-256)
+  String _generateBlockchainHash({
+    required String serialNumber,
+    required String brandId,
+    required DateTime manufacturingDate,
+  }) {
+    final data = '$serialNumber:$brandId:${manufacturingDate.toIso8601String()}';
+    final bytes = utf8.encode(data);
+    final hash = sha256.convert(bytes);
+    return hash.toString();
+  }
+
+  // ==================== STATISTICS (Giữ nguyên) ====================
+  
+  /// Thống kê sản phẩm của brand
+  Future<Map<String, dynamic>> getBrandStatistics(String brandId) async {
+    try {
+      final products = await getProductsByBrand(brandId);
+      
+      int totalProducts = products.length;
+      int totalVerifications = 0;
+      int reportedProducts = 0;
+      int activeProducts = 0;
+      
+      for (var product in products) {
+        totalVerifications += product.verificationCount;
+        if (product.isReported) reportedProducts++;
+        if (product.isActive) activeProducts++;
+      }
+      
+      return {
+        'totalProducts': totalProducts,
+        'totalVerifications': totalVerifications,
+        'reportedProducts': reportedProducts,
+        'activeProducts': activeProducts,
+        'averageVerifications': totalProducts > 0 
+            ? (totalVerifications / totalProducts).toStringAsFixed(1)
+            : '0',
+      };
+    } catch (e) {
+      debugPrint('❌ Error getting statistics: $e');
+      return {};
+    }
+  }
+}
