@@ -23,64 +23,81 @@ class _ScanPageState extends State<ScanPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Lấy kích thước màn hình để tính toán cho chuẩn
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
+      extendBodyBehindAppBar: true, 
       appBar: AppBar(
-        title: const Text('Quét mã QR', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)]),
-          ),
-        ),
+        backgroundColor: Colors.transparent, 
+        elevation: 0,
+        leading: const BackButton(color: Colors.black), 
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: _isLoading
-              ? const CircularProgressIndicator(color: Color(0xFF00BCD4))
-              : SingleChildScrollView(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 250, height: 250,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFF00BCD4), width: 3),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Center(
-                          child: Icon(Icons.qr_code_scanner, size: 120, color: Color(0xFF00BCD4)),
-                        ),
+      // [FIX] Thêm SingleChildScrollView để không bị lỗi khi bàn phím hiện lên
+      body: Container(
+        width: double.infinity,
+        height: size.height, // Chiếm toàn bộ chiều cao
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8F9FA), 
+        ),
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: size.height),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Frame Scan
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 280, height: 280,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [BoxShadow(color: const Color(0xFF00BCD4).withOpacity(0.2), blurRadius: 40, spreadRadius: 10)],
                       ),
-                      const SizedBox(height: 32),
-                      const Text('Quét mã QR trên sản phẩm', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      Text('Đặt mã QR vào giữa khung để quét', style: TextStyle(fontSize: 15, color: Colors.grey[600]), textAlign: TextAlign.center),
-                      const SizedBox(height: 32),
-                      ElevatedButton.icon(
-                        onPressed: () => _startScanning(context),
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text('Bắt đầu quét'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00BCD4),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: () => _showManualInputDialog(context),
-                        icon: const Icon(Icons.edit),
-                        label: const Text('Nhập mã thủ công'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF00BCD4),
-                          side: const BorderSide(color: Color(0xFF00BCD4)),
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                        ),
-                      ),
-                    ],
+                    ),
+                    const Icon(Icons.qr_code_scanner_rounded, size: 150, color: Color(0xFF00BCD4)),
+                  ],
+                ),
+                
+                const SizedBox(height: 50),
+                
+                const Text("Quét mã sản phẩm", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Text("Di chuyển camera đến mã QR trên sản phẩm\nđể kiểm tra thông tin chính hãng.", 
+                  textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600], height: 1.5)),
+                
+                const SizedBox(height: 40),
+
+                // Nút bấm bo tròn
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: ElevatedButton(
+                    onPressed: () => _startScanning(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00BCD4),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      elevation: 5,
+                      shadowColor: const Color(0xFF00BCD4).withOpacity(0.5),
+                    ),
+                    child: const Text('Bắt đầu quét', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () => _showManualInputDialog(context),
+                  child: const Text('Nhập mã thủ công', style: TextStyle(color: Color(0xFF00BCD4), fontWeight: FontWeight.w600)),
+                ),
+                
+                // Khoảng trống dự phòng cho bàn phím
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -92,22 +109,17 @@ class _ScanPageState extends State<ScanPage> {
 
   void _showManualInputDialog(BuildContext parentContext) {
     final TextEditingController codeController = TextEditingController();
-    
     showDialog(
       context: parentContext,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Nhập mã sản phẩm'),
         content: TextField(
-          controller: codeController,
-          decoration: const InputDecoration(hintText: 'Nhập Serial Number...', border: OutlineInputBorder()),
-          keyboardType: TextInputType.text,
-          autofocus: true,
+            controller: codeController, 
+            decoration: const InputDecoration(hintText: 'Nhập Serial Number...', border: OutlineInputBorder()), 
+            autofocus: true // Tự động bật bàn phím
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Hủy')
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Hủy')),
           ElevatedButton(
             onPressed: () {
               final code = codeController.text.trim();
@@ -150,13 +162,14 @@ class _ScanPageState extends State<ScanPage> {
         Map<String, dynamic>? productInfo;
         
         if (product != null) {
+          // [LOGIC QUAN TRỌNG]: Truyền đầy đủ dữ liệu để trang kết quả hiển thị đẹp
           productInfo = {
             'name': product.name,
-            
-            // 👇 ĐÃ SỬA: Để trống ảnh để không bị lỗi 'images' not found
-            'imageUrl': '', 
-            
+            'imageUrl': product.imageUrl, 
             'serialNumber': code,
+            'brandName': product.brandName,
+            'manufacturingDate': product.manufacturingDate.toString(), 
+            'expiryDate': product.expiryDate.toString(),
           };
         }
 

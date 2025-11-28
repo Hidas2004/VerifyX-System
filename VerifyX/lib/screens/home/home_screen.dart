@@ -1,14 +1,14 @@
-import 'package:flutter/foundation.dart' show kIsWeb; // 💡 THÊM IMPORT NÀY
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 // Import các trang con
-import 'pages/home_page.dart';
-import 'pages/search_page.dart';
-import 'pages/scan_page.dart';
-import 'pages/messages_page.dart';
-import 'pages/menu_page.dart';
+import './pages/home_page.dart';
+import './pages/search_page.dart';
+import './pages/scan_page.dart';
+import './pages/messages_page.dart';
+import './pages/menu_page.dart';
 
-// 💡 THÊM IMPORT CHO WEB LAYOUT MỚI (bạn sẽ tạo ở Bước 2)
+// Import Web Layout
 import 'web_home_layout.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,90 +19,96 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  /// Index của tab hiện tại đang được chọn (0-4)
   int _currentIndex = 0;
 
-  /// Danh sách 5 trang tương ứng với 5 tabs
   final List<Widget> _pages = [
-    const HomePage(),       // Index 0: Trang chủ
-    const SearchPage(),     // Index 1: Tìm kiếm
-    const ScanPage(),       // Index 2: Quét mã
-    const MessagesPage(),   // Index 3: Tin nhắn
-    const MenuPage(),       // Index 4: Menu
+    const HomePage(),        // 0: Home
+    const SearchPage(),      // 1: Search
+    const SizedBox(),        // 2: Placeholder
+    const MessagesPage(),    // 3: Chat
+    const MenuPage(),        // 4: Profile
   ];
+
+  void _onTabTapped(int index) {
+    if (index == 2) return;
+    setState(() {
+      _currentIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    // 💡 LOGIC CHIA TÁCH WEB/APP
+    // 1. WEB LAYOUT
     if (kIsWeb) {
-      // ➡️ NẾU LÀ WEB: Trả về layout 3 cột MỚI
-      // Chúng ta truyền danh sách pages vào để web layout có thể sử dụng
-      return WebHomeLayout(
-        pages: _pages,
-      );
-    } else {
-      // ➡️ NẾU LÀ APP: Trả về layout cũ của bạn
-      return _buildAppLayout();
+      return WebHomeLayout(pages: _pages);
     }
+
+    // 2. MOBILE LAYOUT
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
+      
+      // --- SỬA: Nút QR Code đồng bộ màu Brand ---
+      floatingActionButton: Container(
+        width: 68,
+        height: 68,
+        margin: const EdgeInsets.only(top: 30),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF00BCD4).withOpacity(0.4),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () {
+             Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanPage()));
+          },
+          backgroundColor: const Color(0xFF00BCD4), // Màu Cyan Brand
+          elevation: 0,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 32),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
+      // --- Thanh Menu dưới đáy ---
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8,
+        color: Colors.white,
+        elevation: 20,
+        surfaceTintColor: Colors.white,
+        height: 70,
+        padding: EdgeInsets.zero,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(Icons.home_rounded, 0),
+            _buildNavItem(Icons.search_rounded, 1),
+            const SizedBox(width: 48), // Khoảng trống cho nút QR
+            _buildNavItem(Icons.chat_bubble_outline_rounded, 3),
+            _buildNavItem(Icons.person_outline_rounded, 4),
+          ],
+        ),
+      ),
+    );
   }
 
-  /// ───────────────────────────────────────────────────────────────────────
-  /// 📱 WIDGET GIAO DIỆN APP (BottomNavigationBar)
-  /// ───────────────────────────────────────────────────────────────────────
-  Widget _buildAppLayout() {
-    return Scaffold(
-      // Body: Hiển thị page tương ứng với tab đang chọn
-      body: _pages[_currentIndex],
-
-      // Bottom Navigation Bar: 5 tabs
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex, // Tab đang được chọn
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index; // Cập nhật tab hiện tại
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF00BCD4),
-        unselectedItemColor: Colors.grey[600],
-        iconSize: 32,
-        selectedFontSize: 0,
-        unselectedFontSize: 0,
-        showSelectedLabels: false,
-        showUnselectedLabels: false,
-        elevation: 8,
-        items: const [
-          // Tab 1: Trang chủ
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: '',
-          ),
-          // Tab 2: Tìm kiếm
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search_outlined),
-            activeIcon: Icon(Icons.search),
-            label: '',
-          ),
-          // Tab 3: Quét mã QR
-          BottomNavigationBarItem(
-            icon: Icon(Icons.qr_code_scanner_outlined),
-            activeIcon: Icon(Icons.qr_code_scanner),
-            label: '',
-          ),
-          // Tab 4: Tin nhắn
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: '',
-          ),
-          // Tab 5: Menu & Cài đặt
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu_outlined),
-            activeIcon: Icon(Icons.menu),
-            label: '',
-          ),
-        ],
+  Widget _buildNavItem(IconData icon, int index) {
+    final isSelected = _currentIndex == index;
+    return IconButton(
+      onPressed: () => _onTabTapped(index),
+      icon: Icon(
+        icon,
+        size: 28,
+        color: isSelected ? const Color(0xFF00BCD4) : Colors.grey[400],
       ),
     );
   }

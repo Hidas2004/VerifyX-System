@@ -1,36 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Widget Card Sản Phẩm Đã Kiểm Tra Gần Đây
-/// 
-/// Hiển thị thông tin sản phẩm đã được xác thực trong lịch sử
-/// Bao gồm: Hình ảnh, tên sản phẩm, thương hiệu, trạng thái xác thực
-/// 
-/// Sử dụng:
-/// ```dart
-/// RecentProductCard(
-///   productName: 'iPhone 15 Pro Max',
-///   brand: 'Apple',
-///   status: 'Chính hãng',
-///   statusColor: Colors.green,
-///   onTap: () {
-///     // Xem chi tiết sản phẩm
-///   },
-/// )
-/// ```
+/// Widget Card Sản Phẩm - Giao diện "Tem chứng nhận số"
 class RecentProductCard extends StatelessWidget {
-  // Tên sản phẩm (vd: "iPhone 15 Pro Max")
   final String productName;
-  
-  // Thương hiệu (vd: "Apple")
   final String brand;
-  
-  // Trạng thái xác thực (vd: "Chính hãng", "Nghi ngờ giả")
   final String status;
-  
-  // Màu của trạng thái (Xanh = chính hãng, Đỏ = giả)
   final Color statusColor;
-  
-  // Hàm callback khi người dùng nhấn vào card để xem chi tiết
   final VoidCallback onTap;
 
   const RecentProductCard({
@@ -44,66 +19,94 @@ class RecentProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    bool isAuthentic = statusColor == Colors.green || status.toLowerCase().contains("chính hãng");
+    // Màu nền nhạt cho thẻ để trông sạch sẽ (Clean UI)
+    Color bgColor = isAuthentic ? const Color(0xFFF1F8E9) : const Color(0xFFFFEBEE);
+    Color borderColor = isAuthentic ? Colors.green.shade200 : Colors.red.shade200;
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 12), // Khoảng cách giữa các card
-      elevation: 2, // Độ nổi (shadow)
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12), // Bo góc
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(12), // Padding bên trong
-        
-        // Leading: Hình ảnh sản phẩm (placeholder)
-        leading: Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            color: Colors.grey[200], // Màu nền placeholder
-            borderRadius: BorderRadius.circular(8), // Bo góc
-          ),
-          // Icon tạm thời, sau này thay bằng ảnh thật
-          child: const Icon(
-            Icons.phone_android,
-            size: 32,
-            color: Colors.grey,
-          ),
-        ),
-        
-        // Title: Tên sản phẩm
-        title: Text(
-          productName,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold, // Text đậm
-          ),
-        ),
-        
-        // Subtitle: Thương hiệu
-        subtitle: Text(brand),
-        
-        // Trailing: Badge trạng thái xác thực
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 6,
-          ),
-          decoration: BoxDecoration(
-            // Background màu nhạt (10% opacity)
-            color: statusColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20), // Bo góc oval
-            border: Border.all(color: statusColor), // Viền màu status
-          ),
-          child: Text(
-            status,
-            style: TextStyle(
-              color: statusColor, // Text cùng màu với viền
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        
-        // Sự kiện tap để xem chi tiết
+      color: Colors.white,
+      child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // 1. ICON TRẠNG THÁI (Thay vì ảnh sản phẩm nhỏ xíu)
+              Container(
+                width: 60, height: 60,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor, width: 1),
+                ),
+                child: Icon(
+                  isAuthentic ? Icons.verified_user_outlined : Icons.gpp_bad_outlined,
+                  size: 30,
+                  color: statusColor,
+                ),
+              ),
+              
+              const SizedBox(width: 16),
+              
+              // 2. THÔNG TIN CHÍNH
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      productName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.business, size: 12, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text("SX bởi: $brand", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Giả lập mã Hash ngắn để trông "Blockchain" hơn
+                    Text(
+                      "Hash: 0x${productName.hashCode.toRadixString(16).toUpperCase()}...A7",
+                      style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey[400]),
+                    )
+                  ],
+                ),
+              ),
+
+              // 3. BADGE TRẠNG THÁI (Dạng con dấu)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: statusColor, // Nền màu đậm luôn cho nổi
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(color: statusColor.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2))
+                  ]
+                ),
+                child: Text(
+                  isAuthentic ? "CHÍNH HÃNG" : "CẢNH BÁO",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    letterSpacing: 0.5
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

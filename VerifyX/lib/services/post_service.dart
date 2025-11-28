@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/post_model.dart';
-import '../models/comment_model.dart';
 
-/// Service xử lý tất cả logic liên quan đến Posts
-/// Tách biệt hoàn toàn với UI layer
+// ⚠️ LƯU Ý: Kiểm tra lại đường dẫn import này cho đúng với cấu trúc thư mục của bạn
+import '../../models/post_model.dart'; 
+import '../../models/comment_model.dart'; 
+
 class PostService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -12,23 +12,24 @@ class PostService {
   // ==================== POSTS ====================
 
   /// Lấy stream posts theo filter
-  /// FIX: Loại bỏ orderBy để tránh lỗi composite index
-  /// Sort sẽ được thực hiện trong memory sau khi lấy data
+  /// Đã sửa: postType là tùy chọn (String?) để Admin lấy được tất cả bài
   Stream<List<PostModel>> getPostsStream({
-    required String postType,
+    String? postType, 
     String sortBy = 'newest',
   }) {
-    // Query đơn giản chỉ có where, không có orderBy
-    Query query = _firestore
-        .collection('posts')
-        .where('postType', isEqualTo: postType);
+    Query query = _firestore.collection('posts');
+
+    // Chỉ lọc nếu postType khác null và khác 'all'
+    if (postType != null && postType != 'all') {
+      query = query.where('postType', isEqualTo: postType);
+    }
 
     return query.snapshots().map((snapshot) {
       List<PostModel> posts = snapshot.docs
           .map((doc) => PostModel.fromFirestore(doc))
           .toList();
 
-      // Sort tất cả trong memory
+      // Sort thủ công ở client
       switch (sortBy) {
         case 'oldest':
           posts.sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -62,10 +63,12 @@ class PostService {
   }
 
   /// Tạo post mới
+  /// 🟢 ĐÃ SỬA: Thêm tham số isOfficial cho Brand
   Future<String> createPost({
     required String content,
     required String postType,
     List<String> imageUrls = const [],
+    bool isOfficial = false, // Mặc định là false (User thường)
   }) async {
     try {
       final currentUser = _auth.currentUser;
@@ -87,13 +90,14 @@ class PostService {
 
       final docRef = await _firestore.collection('posts').add({
         'authorId': currentUser.uid,
-        'userId': currentUser.uid, // Giữ lại field cũ để không vỡ rule/compat
+        'userId': currentUser.uid, 
         'authorName': authorName,
         'authorPhotoUrl': authorPhotoUrl,
         'content': content,
         'imageUrls': imageUrls,
         'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : null,
         'postType': postType,
+        'isOfficial': isOfficial, // Lưu trạng thái tích xanh
         'likes': <String>[],
         'commentsCount': 0,
         'createdAt': nowServer,
@@ -128,20 +132,16 @@ class PostService {
   Future<void> deletePost(String postId) async {
     try {
       final postRef = _firestore.collection('posts').doc(postId);
-
-      // Xóa tất cả comments trong subcollection
+      // Xóa comments
       final commentsSnapshot = await postRef.collection('comments').get();
-
       final batch = _firestore.batch();
       for (var doc in commentsSnapshot.docs) {
         batch.delete(doc.reference);
       }
-
-      // Xóa post
       batch.delete(postRef);
       await batch.commit();
     } catch (e) {
-      throw Exception('Không thể xóa bài viết: $e');
+      throw Exception('Lỗi xóa bài: $e');
     }
   }
 
@@ -162,14 +162,12 @@ class PostService {
         throw Exception('Bài viết không tồn tại');
       }
 
-      final post = PostModel.fromFirestore(postDoc);
-      final likes = List<String>.from(post.likes);
+      final data = postDoc.data() as Map<String, dynamic>;
+      final likes = List<String>.from(data['likes'] ?? []);
 
       if (likes.contains(currentUser.uid)) {
-        // Unlike
         likes.remove(currentUser.uid);
       } else {
-        // Like
         likes.add(currentUser.uid);
       }
 
@@ -221,7 +219,6 @@ class PostService {
         throw Exception('Bạn phải đăng nhập để comment');
       }
 
-      // Lấy thông tin user
       final userDoc = await _firestore
           .collection('users')
           .doc(currentUser.uid)
@@ -239,14 +236,12 @@ class PostService {
         createdAt: DateTime.now(),
       );
 
-      // Thêm comment
       final docRef = await _firestore
           .collection('posts')
           .doc(postId)
           .collection('comments')
           .add(comment.toMap());
 
-      // Tăng commentsCount của post
       await _firestore.collection('posts').doc(postId).update({
         'commentsCount': FieldValue.increment(1),
       });
@@ -263,7 +258,6 @@ class PostService {
     required String postId,
   }) async {
     try {
-      // Xóa comment
       await _firestore
           .collection('posts')
           .doc(postId)
@@ -271,7 +265,6 @@ class PostService {
           .doc(commentId)
           .delete();
 
-      // Giảm commentsCount của post
       await _firestore.collection('posts').doc(postId).update({
         'commentsCount': FieldValue.increment(-1),
       });
@@ -282,7 +275,6 @@ class PostService {
 
   // ==================== STATISTICS ====================
 
-  /// Lấy tổng số posts
   Future<int> getTotalPostsCount() async {
     try {
       final snapshot = await _firestore.collection('posts').count().get();
@@ -292,7 +284,6 @@ class PostService {
     }
   }
 
-  /// Lấy posts của user
   Stream<List<PostModel>> getUserPostsStream(String userId) {
     return _firestore
         .collection('posts')

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart'; // Giữ nguyên import
+import '../../../models/post_model.dart';
 import '../../../providers/post_provider.dart';
 import '../../home/widgets/create_post_button.dart';
 import '../../home/widgets/post_card.dart';
@@ -11,128 +13,118 @@ class BrandCommunityPage extends StatefulWidget {
   State<BrandCommunityPage> createState() => _BrandCommunityPageState();
 }
 
-class _BrandCommunityPageState extends State<BrandCommunityPage> {
+class _BrandCommunityPageState extends State<BrandCommunityPage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final postProvider = Provider.of<PostProvider>(context);
-
-    // 💡 THAY ĐỔI: Xóa Scaffold và AppBar
-    // return Scaffold(
-    //   appBar: AppBar( ... ),
-    //   body: Column( ... )
-    // );
-    
-    // 💡 THAY ĐỔI: Trả về trực tiếp nội dung
-    return Column(
-      children: [
-        // 💡 THAY ĐỔI: Bọc CreatePostButton trong Card (giống HomePage)
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
+    // 🟢 SỬA ĐỔI: Không dùng Row chia cột nữa. 
+    // Dùng Align để căn giữa toàn bộ giao diện.
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Container(
+        // 🟢 CẤU HÌNH "TỈ LỆ VÀNG": Max Width 800px
+        constraints: const BoxConstraints(maxWidth: 800),
+        // Thêm padding ngang để khi thu nhỏ màn hình không bị dính sát mép
+        padding: const EdgeInsets.symmetric(horizontal: 16), 
+        
+        child: Column(
+          children: [
+            // 1. THANH CÔNG CỤ (Header)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              color: Colors.white, // Hoặc transparent nếu muốn nền xám chung
+              child: Column(
+                children: [
+                  CreatePostButton(
+                    onFilterChanged: (_) {}, 
+                    onSortChanged: (_) {},
+                    hintText: "Đăng thông báo chính thức...",
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // TabBar căn giữa đẹp mắt
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      labelColor: Colors.blue[800],
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: Colors.blue[800],
+                      indicatorWeight: 3,
+                      labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      tabs: const [
+                        Tab(text: "Tất cả"),
+                        Tab(text: "@Nhắc tên"), // Rút gọn text cho đỡ rườm rà
+                        Tab(text: "Hỗ trợ"),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: CreatePostButton(
-            onFilterChanged: (filterType) {
-              postProvider.setFilter(filterType);
-            },
-            onSortChanged: (sortType) {
-              postProvider.setSort(sortType);
-            },
-          ),
+            ),
+
+            // 2. DANH SÁCH BÀI VIẾT (Feed)
+            // Expanded để nó chiếm hết phần còn lại của chiều dọc
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildFeed("all"),
+                  _buildFeed("mention"), 
+                  _buildFeed("support"),
+                ],
+              ),
+            ),
+          ],
         ),
-        
-        // 💡 THAY ĐỔI: Bỏ Divider và thay bằng khoảng cách
-        // const Divider(height: 8, thickness: 8, color: Color(0xFFF0F2F5)),
-        const SizedBox(height: 24),
-        
-        // Feed bài viết
-        Expanded(
-          child: _buildPostsFeed(),
-        ),
-      ],
+      ),
     );
   }
 
-  /// Feed bài viết
-  Widget _buildPostsFeed() {
+  Widget _buildFeed(String filter) {
     return Consumer<PostProvider>(
-      builder: (context, postProvider, child) {
-        return StreamBuilder(
-          stream: postProvider.postService.getPostsStream(
-            postType: postProvider.currentFilter,
-            sortBy: postProvider.currentSort,
+      builder: (context, provider, _) {
+        return StreamBuilder<List<PostModel>>(
+          stream: provider.postService.getPostsStream(
+            postType: filter == 'all' ? null : filter, 
           ),
           builder: (context, snapshot) {
-            // Loading
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(
-                  // 💡 THAY ĐỔI: Màu cyan -> xanh đậm
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4A4DE6)),
-                ),
-              );
+               return const Center(child: CircularProgressIndicator());
             }
-
-            // Error
             if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, size: 80, color: Colors.red[300]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Có lỗi xảy ra',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              );
+               return Center(child: Text("Lỗi: ${snapshot.error}"));
             }
-
-            // Empty
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Center(
-                // ... (giữ nguyên)
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.post_add, size: 80, color: Colors.grey[300]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Chưa có bài viết nào',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Hãy là Brand đầu tiên đăng bài!',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            // Data - Có bài viết
-            final posts = snapshot.data!;
             
-            // 💡 THAY ĐỔI: Dùng ListView.builder
-            return ListView.builder(
-              physics: const BouncingScrollPhysics(),
+            final posts = snapshot.data ?? [];
+            if (posts.isEmpty) {
+               return Center(
+                 child: Column(
+                   mainAxisAlignment: MainAxisAlignment.center,
+                   children: [
+                     Icon(Icons.feed_outlined, size: 60, color: Colors.grey[300]),
+                     const SizedBox(height: 12),
+                     Text("Chưa có bài viết nào", style: TextStyle(color: Colors.grey[500])),
+                   ],
+                 ),
+               );
+            }
+
+            return ListView.separated(
+              padding: const EdgeInsets.symmetric(vertical: 16), // Padding trên dưới cho list
               itemCount: posts.length,
-              itemBuilder: (context, index) {
-                final post = posts[index];
-                return PostCard(post: post);
-              },
+              separatorBuilder: (ctx, i) => const SizedBox(height: 24), // Khoảng cách giữa các bài viết thoáng hơn
+              itemBuilder: (ctx, i) => PostCard(post: posts[i]),
             );
           },
         );

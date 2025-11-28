@@ -46,7 +46,7 @@ const contract = new web3.eth.Contract(contractABI, contractAddress);
 console.log(`May chu su dung vi: ${serverAccount.address}`);
 
 // ============================================================
-// API 1: TẠO LÔ HÀNG (BATCH)
+// API 1: TẠO LÔ HÀNG (BATCH) - [ĐÃ NÂNG CẤP BLOCK NUMBER]
 // ============================================================
 app.post('/api/batch/create', async (req, res) => {
   try {
@@ -55,22 +55,38 @@ app.post('/api/batch/create', async (req, res) => {
 
     const blockchainId = Date.now(); 
 
+    // Gửi Transaction lên Ganache
     const tx = await contract.methods.createBatch(
         blockchainId, batchNumber
     ).send({ from: serverAccount.address, gas: 600000 });
 
+    // [QUAN TRỌNG] Lấy số Block từ biên lai giao dịch
+    // Web3.js trả về receipt trong biến tx
+    const blockNum = tx.blockNumber; 
+    console.log(`✅ Blockchain OK. Hash: ${tx.transactionHash} | Block: ${blockNum}`);
+
     const batchData = {
         batchNumber, productName, brandId, brandName, manufactureDate, expiryDate, 
         quantity: parseInt(quantity), status: 'active', productIds: [],
-        blockchainData: { id: blockchainId, txHash: tx.transactionHash, timestamp: Date.now() },
+        // Lưu cả blockNumber vào Firestore
+        blockchainData: { 
+            id: blockchainId, 
+            txHash: tx.transactionHash, 
+            blockNumber: Number(blockNum), // Lưu dưới dạng số
+            timestamp: Date.now() 
+        },
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
 
     const docRef = await db.collection('batches').add(batchData);
     await docRef.update({ id: docRef.id });
 
-    console.log(`✅ Batch OK. Hash: ${tx.transactionHash}`);
-    res.status(201).json({ success: true, batchId: docRef.id, txHash: tx.transactionHash });
+    res.status(201).json({ 
+        success: true, 
+        batchId: docRef.id, 
+        txHash: tx.transactionHash,
+        blockNumber: Number(blockNum) // Trả về cho App dùng ngay nếu cần
+    });
   } catch (error) {
     console.error("❌ LOI BATCH:", error);
     res.status(500).json({ error: error.toString() });
@@ -78,7 +94,7 @@ app.post('/api/batch/create', async (req, res) => {
 });
 
 // ============================================================
-// API 2: TẠO SẢN PHẨM (PRODUCT) - [PHẦN BẠN ĐANG THIẾU]
+// API 2: TẠO SẢN PHẨM (PRODUCT)
 // ============================================================
 app.post('/api/product/create', async (req, res) => {
   try {
@@ -89,20 +105,26 @@ app.post('/api/product/create', async (req, res) => {
 
     console.log(`🔄 [API] Tao san pham: ${name} (Serial: ${serialNumber})`);
 
-    // 1. Ghi Blockchain (Gắn sản phẩm vào lô)
+    // 1. Ghi Blockchain
     const tx = await contract.methods.registerProduct(
       serialNumber, blockchainBatchId 
     ).send({ from: serverAccount.address, gas: 600000 });
 
     const txHash = tx.transactionHash;
-    console.log(`✅ Blockchain OK: ${txHash}`);
+    const blockNum = tx.blockNumber; // Lấy Block Number
+
+    console.log(`✅ Blockchain OK: ${txHash} (Block ${blockNum})`);
 
     // 2. Ghi Firebase
     const productData = {
       serialNumber, name, description, ingredients, category, brandId, brandName,
       imageUrl: imageUrl || "", batchId, blockchainBatchId, 
       manufacturingDate, expiryDate,
-      blockchainData: { txHash: txHash, registeredAt: new Date().toISOString() },
+      blockchainData: { 
+          txHash: txHash, 
+          blockNumber: Number(blockNum), // Lưu Block Number
+          registeredAt: new Date().toISOString() 
+      },
       isActive: true, isReported: false, verificationCount: 0,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     };
@@ -110,7 +132,7 @@ app.post('/api/product/create', async (req, res) => {
     const docRef = await db.collection('products').add(productData);
     await docRef.update({ id: docRef.id });
 
-    // 3. Cập nhật lô hàng (Thêm ID sản phẩm vào mảng productIds của Batch)
+    // 3. Cập nhật lô hàng
     await db.collection('batches').doc(batchId).update({
       productIds: admin.firestore.FieldValue.arrayUnion(docRef.id)
     });
@@ -125,16 +147,38 @@ app.post('/api/product/create', async (req, res) => {
 });
 
 // ============================================================
-// API 3: QUÉT CẬP NHẬT TRẠNG THÁI
+// API 3: QUÉT CẬP NHẬT TRẠNG THÁI - [FIX LỖI KHÔNG CẬP NHẬT DB]
 // ============================================================
 app.post('/api/batch/scan', async (req, res) => {
   try {
-    const { id, location, status } = req.body;
+    const { id, location, status } = req.body; // id ở đây là blockchainId
+    console.log(`🔄 [scanBatch] Updating ID=${id} -> Status=${status}`);
+
+    // 1. Gửi lên Blockchain
     const tx = await contract.methods.scanBatch(id, location, status).send({ from: serverAccount.address, gas: 300000 });
-    console.log(`[scanBatch] id=${id} status=${status}`);
-    res.status(201).json({ success: true, txHash: tx.transactionHash });
+    const blockNum = tx.blockNumber;
+    
+    // 2. [QUAN TRỌNG] Cập nhật lại trạng thái trong Firebase
+    // Tìm lô hàng trong Firebase có blockchainData.id trùng với id gửi lên
+    const batchQuery = await db.collection('batches').where('blockchainData.id', '==', id).get();
+
+    if (!batchQuery.empty) {
+        const batchDoc = batchQuery.docs[0];
+        await batchDoc.ref.update({
+            status: status,
+            // Cập nhật thông tin blockchain mới nhất (để hiện Block mới nhất khi scan)
+            'blockchainData.txHash': tx.transactionHash,
+            'blockchainData.blockNumber': Number(blockNum),
+            updatedAt: new Date().toISOString()
+        });
+        console.log("✅ Da cap nhat Firestore!");
+    } else {
+        console.warn("⚠️ Khong tim thay lo hang trong Firestore de update status");
+    }
+
+    res.status(201).json({ success: true, txHash: tx.transactionHash, blockNumber: Number(blockNum) });
   } catch (error) {
-    console.error(error);
+    console.error("❌ LOI SCAN:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -146,14 +190,20 @@ app.get('/api/history/:id', async (req, res) => {
   try {
     const batchId = req.params.id;
     const batch = await contract.methods.batches(batchId).call();
+    
+    // Web3 trả về boolean đôi khi là string, check kỹ
     if (!batch.isInitialized) return res.status(404).json({ error: `Batch ${batchId} not found` });
 
     const history = await contract.methods.getBatchHistory(batchId).call();
+    
+    // Format lại dữ liệu cho đẹp
     const formattedHistory = history.map((record) => ({
       timestamp: new Date(Number(record.timestamp) * 1000).toISOString(),
       location: record.location,
       status: record.status,
       actor: record.actor,
+      // Nếu smart contract của bạn có lưu blockNumber trong struct History thì lấy ra, 
+      // nếu không thì thôi.
     }));
     res.status(200).json(formattedHistory);
   } catch (error) {

@@ -9,13 +9,14 @@ class PostModel {
   final String? authorPhotoUrl;
   final String content;
   final List<String> imageUrls;
-  final String postType; // 'community' hoặc 'brand'
-  final List<String> likes; // Danh sách userId đã like
+  final String postType; // 'community', 'brand', 'alert'
+  final bool isOfficial; // 🟢 MỚI: Đánh dấu bài viết chính chủ của Brand
+  final List<String> likes;
   final int commentsCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  PostModel({
+ PostModel({
     required this.id,
     required this.authorId,
     required this.authorName,
@@ -23,6 +24,7 @@ class PostModel {
     required this.content,
     this.imageUrls = const [],
     required this.postType,
+    this.isOfficial = false, // Mặc định false
     this.likes = const [],
     this.commentsCount = 0,
     required this.createdAt,
@@ -30,16 +32,17 @@ class PostModel {
   });
 
   /// Tạo PostModel từ Firestore document
-  factory PostModel.fromFirestore(DocumentSnapshot doc) {
+factory PostModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return PostModel(
       id: doc.id,
-  authorId: data['authorId'] ?? data['userId'] ?? '',
+      authorId: data['authorId'] ?? data['userId'] ?? '',
       authorName: data['authorName'] ?? 'Unknown',
       authorPhotoUrl: data['authorPhotoUrl'],
       content: data['content'] ?? '',
-  imageUrls: _extractImageUrls(data),
+      imageUrls: _extractImageUrls(data),
       postType: data['postType'] ?? 'community',
+      isOfficial: data['isOfficial'] ?? false, // 🟢 Map từ Firestore
       likes: List<String>.from(data['likes'] ?? []),
       commentsCount: data['commentsCount'] ?? 0,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -71,10 +74,11 @@ class PostModel {
       'authorName': authorName,
       'authorPhotoUrl': authorPhotoUrl,
       'content': content,
-  'imageUrls': imageUrls,
-  'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : null,
-  'userId': authorId,
+      'imageUrls': imageUrls,
+      'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : null,
+      'userId': authorId,
       'postType': postType,
+      'isOfficial': isOfficial, // 🟢 Lưu vào Firestore
       'likes': likes,
       'commentsCount': commentsCount,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -124,12 +128,10 @@ class PostModel {
     if (raw is Iterable) {
       return raw.map((e) => e?.toString() ?? '').where((e) => e.isNotEmpty).toList();
     }
-
     final single = data['imageUrl'];
     if (single is String && single.isNotEmpty) {
       return [single];
     }
-
     return const [];
   }
 }

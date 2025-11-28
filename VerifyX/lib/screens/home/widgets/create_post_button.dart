@@ -22,11 +22,13 @@ class CreatePostButton extends StatefulWidget {
   
   /// Callback khi thay đổi cách sắp xếp
   final Function(String sortType) onSortChanged;
+  final String? hintText;
   
   const CreatePostButton({
     super.key,
     required this.onFilterChanged,
     required this.onSortChanged,
+    this.hintText,
   });
 
   @override

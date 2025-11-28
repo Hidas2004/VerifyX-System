@@ -7,234 +7,292 @@ import 'comment_bottom_sheet.dart';
 
 class PostCard extends StatelessWidget {
   final PostModel post;
+  final bool isAdminView;
 
-  const PostCard({super.key, required this.post});
+  const PostCard({super.key, required this.post, this.isAdminView = false});
 
   @override
   Widget build(BuildContext context) {
+    // Nếu là Admin View thì dùng layout riêng (đơn giản hóa cho Admin)
+    if (isAdminView) {
+      return _buildAdminLayout(context);
+    }
+    // Consumer/Brand View: Giao diện Atomic Style đẹp
+    return _buildStandardLayout(context);
+  }
+
+  // ===========================================================================
+  // 🎨 GIAO DIỆN CHUẨN (ATOMIC STYLE) - CHO USER & BRAND
+  // ===========================================================================
+  Widget _buildStandardLayout(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
     final isLiked = post.isLikedBy(currentUserId);
 
-    // 💡 THAY ĐỔI: Đây là phần quan trọng nhất để tạo giao diện Card
     return Container(
-      // 💡 THÊM: Khoảng cách (margin) bên dưới mỗi card
-      margin: const EdgeInsets.only(bottom: 24),
-      // 💡 THÊM: Để bo góc các widget con bên trong (như hình ảnh)
-      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
-        // 💡 THÊM: Bo góc
-        borderRadius: BorderRadius.circular(12),
-        // 💡 THÊM: Đổ bóng
+        borderRadius: BorderRadius.circular(30), // 💡 Bo góc cực lớn (30px)
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.05), // Bóng mờ rất nhẹ tinh tế
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      // 💡 THAY ĐỔI: Bỏ padding dọc, để các widget con tự padding
-      padding: const EdgeInsets.symmetric(vertical: 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 💡 THAY ĐỔI: Thêm padding cho header
+          // 1. HEADER: Avatar + Tên + Menu
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: _buildPostHeader(context),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Row(
+              children: [
+                // Avatar
+                Container(
+                  padding: const EdgeInsets.all(2), // Viền trắng nhỏ quanh avatar
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.grey[100],
+                    backgroundImage: post.authorPhotoUrl != null 
+                        ? NetworkImage(post.authorPhotoUrl!) 
+                        : null,
+                    child: post.authorPhotoUrl == null 
+                        ? Text(post.authorName.isNotEmpty ? post.authorName[0].toUpperCase() : 'U') 
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                
+                // Tên & Thời gian
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            post.authorName, 
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (post.isOfficial) ...[
+                            const SizedBox(width: 4),
+                            const Icon(Icons.verified, color: Colors.blue, size: 14)
+                          ]
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatTime(post.createdAt), 
+                        style: TextStyle(color: Colors.grey[500], fontSize: 11)
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Nút Menu (3 chấm)
+                IconButton(
+                  icon: const Icon(Icons.more_vert, color: Colors.grey),
+                  onPressed: () => _showPostMenu(context),
+                ),
+              ],
+            ),
           ),
+
+          // 2. HÌNH ẢNH (Điểm nhấn chính)
+          if (post.imageUrls.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24), // Bo góc ảnh mềm mại
+                child: AspectRatio(
+                  aspectRatio: 1, // Tỷ lệ vuông (Instagram style) hoặc 4/3
+                  child: Image.network(
+                    post.imageUrls[0],
+                    fit: BoxFit.cover,
+                    loadingBuilder: (ctx, child, loading) {
+                      if (loading == null) return child;
+                      return Container(
+                        color: Colors.grey[100],
+                        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      );
+                    },
+                    errorBuilder: (ctx, _, __) => Container(
+                      color: Colors.grey[100],
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // 3. THANH TƯƠNG TÁC (Dạng viên thuốc - Pill Shape)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // Nút Like
+                InkWell(
+                  onTap: () => _handleLike(context),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isLiked ? Colors.red.withOpacity(0.1) : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          color: isLiked ? Colors.red : Colors.grey[700],
+                          size: 20,
+                        ),
+                        if (post.likesCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            "${post.likesCount}",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isLiked ? Colors.red : Colors.grey[800],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(width: 12),
+
+                // Nút Comment
+                InkWell(
+                  onTap: () => _handleComment(context),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.chat_bubble_outline, color: Colors.grey[700], size: 20),
+                        if (post.commentsCount > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            "${post.commentsCount}",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[800],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                ),
+
+                const Spacer(),
+                
+                // Nút Share
+                IconButton(
+                  onPressed: () => _handleShare(context),
+                  icon: Icon(Icons.share_outlined, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+
+          // 4. NỘI DUNG TEXT (Caption)
           if (post.content.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(post.content, style: const TextStyle(fontSize: 15)),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+              child: Text(
+                post.content,
+                style: TextStyle(
+                  color: Colors.grey[800],
+                  height: 1.4,
+                  fontSize: 14,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          
-          // 💡 THAY ĐỔI: Thêm khoảng cách nếu có ảnh
-          if (post.imageUrls.isNotEmpty) const SizedBox(height: 8),
-          if (post.imageUrls.isNotEmpty) _buildImages(),
-
-          // 💡 THAY ĐỔI: Thêm padding cho stats
-          Padding(
-             padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-            child: _buildStats(),
-          ),
-          const Divider(height: 1),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionButton(
-                  context: context,
-                  icon: isLiked ? Icons.favorite : Icons.favorite_border,
-                  label: 'Thích',
-                  color: isLiked ? Colors.red : Colors.grey[600]!,
-                  onTap: () => _handleLike(context),
-                ),
-              ),
-              Expanded(
-                child: _buildActionButton(
-                  context: context,
-                  icon: Icons.chat_bubble_outline,
-                  label: 'Bình luận',
-                  color: Colors.grey[600]!,
-                  onTap: () => _handleComment(context),
-                ),
-              ),
-              Expanded(
-                child: _buildActionButton(
-                  context: context,
-                  icon: Icons.share_outlined,
-                  label: 'Chia sẻ',
-                  color: Colors.grey[600]!,
-                  onTap: () => _handleShare(context),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildPostHeader(BuildContext context) {
-    // 💡 THAY ĐỔI: Bỏ Padding (đã thêm ở widget cha)
-    // padding: const EdgeInsets.symmetric(horizontal: 12),
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 20,
-          backgroundColor: const Color(0xFF00BCD4),
-          backgroundImage: post.authorPhotoUrl != null
-              ? NetworkImage(post.authorPhotoUrl!)
-              : null,
-          child: post.authorPhotoUrl == null
-              ? Text(
-                  post.authorName.substring(0, 1).toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                )
-              : null,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                post.authorName,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
-              ),
-              Text(
-                _formatTime(post.createdAt),
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.more_horiz),
-          onPressed: () => _showPostMenu(context),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildImages() {
-    if (post.imageUrls.length == 1) {
-      // 💡 THAY ĐỔI: Bỏ ClipRRect, vì 'clipBehavior' ở Container cha đã xử lý
-      return Image.network(
-        post.imageUrls[0],
-        width: double.infinity,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            height: 200,
-            color: Colors.grey[200],
-            child: const Center(
-              child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
-            ),
-          );
-        },
-      );
-    }
-    return const SizedBox.shrink();
-  }
-
-  Widget _buildStats() {
-    // 💡 THAY ĐỔI: Bỏ Padding (đã thêm ở widget cha)
-    // padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+  // ===========================================================================
+  // 🛠 GIAO DIỆN ADMIN (GIỮ NGUYÊN LOGIC CŨ CỦA BẠN)
+  // ===========================================================================
+  Widget _buildAdminLayout(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
       child: Row(
         children: [
-          Text(
-            '${post.likesCount} lượt thích',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          Container(
+            width: 50, height: 50,
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              image: post.imageUrls.isNotEmpty 
+                  ? DecorationImage(image: NetworkImage(post.imageUrls[0]), fit: BoxFit.cover)
+                  : null
+            ),
           ),
-          const Spacer(),
-          Text(
-            '${post.commentsCount} bình luận',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(post.authorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(post.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey[700], fontSize: 13)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            onPressed: () => _confirmDeletePost(context, post.id),
           ),
         ],
       ),
     );
   }
 
- // ... (Phần còn lại của file giữ nguyên) ...
-  Widget _buildActionButton({
-    required BuildContext context,
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // ===========================================================================
+  // ⚡ LOGIC XỬ LÝ (FUNCTIONALITIES)
+  // ===========================================================================
 
   void _handleLike(BuildContext context) {
-    final postProvider = Provider.of<PostProvider>(context, listen: false);
-    postProvider.toggleLike(post.id);
+    // Gọi Provider để xử lý like
+    Provider.of<PostProvider>(context, listen: false).toggleLike(post.id);
   }
 
   void _handleComment(BuildContext context) {
+    // Mở BottomSheet bình luận
     final postProvider = Provider.of<PostProvider>(context, listen: false);
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return ChangeNotifierProvider<PostProvider>.value(
-          value: postProvider,
-          child: CommentBottomSheet(post: post),
-        );
-      },
+      backgroundColor: Colors.transparent, // Để thấy được bo góc của BottomSheet
+      builder: (_) => ChangeNotifierProvider.value(
+        value: postProvider,
+        child: CommentBottomSheet(post: post),
+      ),
     );
   }
 
@@ -246,68 +304,58 @@ class PostCard extends StatelessWidget {
 
   void _showPostMenu(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    
+    // Chỉ chủ bài viết mới có quyền xóa
     if (post.authorId != currentUserId) return;
-
+    
     showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return Column(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Chỉnh sửa'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Tính năng đang phát triển')),
-                );
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text(
-                'Xóa bài viết',
-                style: TextStyle(color: Colors.red),
-              ),
+              title: const Text('Xóa bài viết', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(context);
-                _showDeleteConfirmation(context);
+                _confirmDeletePost(context, post.id);
               },
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context) {
+  void _confirmDeletePost(BuildContext context, String postId) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Xóa bài viết?'),
-          content: const Text('Bạn có chắc chắn muốn xóa bài viết này?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
+      builder: (ctx) => AlertDialog(
+        title: const Text("Xóa bài viết?"),
+        content: const Text("Hành động này không thể hoàn tác."),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Hủy", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                final postProvider = Provider.of<PostProvider>(
-                  context,
-                  listen: false,
-                );
-                postProvider.deletePost(post.id);
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Xóa'),
-            ),
-          ],
-        );
-      },
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Provider.of<PostProvider>(context, listen: false).deletePost(postId);
+            },
+            child: const Text("Xóa", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -315,16 +363,11 @@ class PostCard extends StatelessWidget {
     final now = DateTime.now();
     final difference = now.difference(time);
 
-    if (difference.inSeconds < 60) {
-      return 'Vừa xong';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} phút trước';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours} giờ trước';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} ngày trước';
-    } else {
-      return '${time.day}/${time.month}/${time.year}';
-    }
+    if (difference.inSeconds < 60) return 'Vừa xong';
+    if (difference.inMinutes < 60) return '${difference.inMinutes} phút trước';
+    if (difference.inHours < 24) return '${difference.inHours} giờ trước';
+    if (difference.inDays < 7) return '${difference.inDays} ngày trước';
+    
+    return '${time.day}/${time.month}/${time.year}';
   }
 }

@@ -16,21 +16,10 @@ class MenuPage extends StatelessWidget {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Menu'),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)],
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: const Color(0xFFF8F9FA),
+      // Bỏ AppBar mặc định để làm Header cong tự tạo
       body: FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser?.uid)
-            .get(),
+        future: FirebaseFirestore.instance.collection('users').doc(currentUser?.uid).get(),
         builder: (context, snapshot) {
           final userData = snapshot.data?.data() as Map<String, dynamic>?;
           final displayName = userData?['displayName'] ?? 'User';
@@ -40,181 +29,47 @@ class MenuPage extends StatelessWidget {
           return SingleChildScrollView(
             child: Column(
               children: [
-                // Header profile
-                _buildProfileHeader(displayName, email, photoURL),
-
-                const SizedBox(height: 16),
-                
-                // Brand Management - CHỈ hiển thị cho tài khoản Brand
-                if (userData?['userType'] == 'brand') ...[
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF00BCD4).withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const BrandHomeScreen(),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(
-                                  Icons.store,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Trang Brand',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      'Quản lý sản phẩm & thương hiệu',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.arrow_forward_ios,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                // HEADER CONG (Sửa lại cho đẹp)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(24, 60, 24, 30),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))],
                   ),
-                  const SizedBox(height: 8),
-                  const Divider(),
-                ],
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: const Color(0xFF00BCD4),
+                        backgroundImage: photoURL != null ? NetworkImage(photoURL) : null,
+                        child: photoURL == null ? Text(displayName[0].toUpperCase(), style: const TextStyle(fontSize: 30, color: Colors.white)) : null,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(displayName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(email, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 20),
+
+                // Brand Management (Chỉ hiện nếu là brand)
+                if (userData?['userType'] == 'brand') 
+                  _buildBrandCard(context),
 
                 // Menu items
-                _buildMenuItem(
-                  context,
-                  icon: Icons.person_outline,
-                  title: 'Thông tin cá nhân',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Tính năng đang phát triển')),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.history_outlined,
-                  title: 'Lịch sử kiểm tra',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Tính năng đang phát triển')),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.favorite_outline,
-                  title: 'Sản phẩm yêu thích',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Tính năng đang phát triển')),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.settings_outlined,
-                  title: 'Cài đặt',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Tính năng đang phát triển')),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.help_outline,
-                  title: 'Trợ giúp & Hỗ trợ',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Tính năng đang phát triển')),
-                    );
-                  },
-                ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.info_outline,
-                  title: 'Về VerifyX',
-                  onTap: () {
-                    _showAboutDialog(context);
-                  },
-                ),
+                _buildMenuItem(context, icon: Icons.person_outline, title: 'Thông tin cá nhân', onTap: () {}),
+                _buildMenuItem(context, icon: Icons.history_outlined, title: 'Lịch sử kiểm tra', onTap: () {}),
+                _buildMenuItem(context, icon: Icons.settings_outlined, title: 'Cài đặt', onTap: () {}),
+                _buildMenuItem(context, icon: Icons.info_outline, title: 'Về VerifyX', onTap: () => _showAboutDialog(context)),
+                
+                // 💡 ĐÃ ẨN NÚT DEBUG
+                // _buildMenuItem(context, icon: Icons.bug_report, title: 'DEBUG', onTap: ...),
+
                 const Divider(height: 32),
-                // DEBUG TOOL - Cập nhật User Type
-                _buildMenuItem(
-                  context,
-                  icon: Icons.bug_report,
-                  title: '🔧 Debug: Cập nhật User Type',
-                  titleColor: Colors.orange,
-                  iconColor: Colors.orange,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const UpdateUserTypeScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 32),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.logout,
-                  title: 'Đăng xuất',
-                  titleColor: Colors.red,
-                  iconColor: Colors.red,
-                  onTap: () => _showLogoutDialog(context),
-                ),
-                const SizedBox(height: 24),
+                _buildMenuItem(context, icon: Icons.logout, title: 'Đăng xuất', titleColor: Colors.red, iconColor: Colors.red, onTap: () => _showLogoutDialog(context)),
               ],
             ),
           );
@@ -277,26 +132,28 @@ class MenuPage extends StatelessWidget {
   }
 
   /// Menu item
-  Widget _buildMenuItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-    Color? titleColor,
-    Color? iconColor,
-  }) {
+  Widget _buildMenuItem(BuildContext context, {required IconData icon, required String title, required VoidCallback onTap, Color? titleColor, Color? iconColor}) {
     return ListTile(
       leading: Icon(icon, color: iconColor ?? Colors.grey[700]),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 16,
-          color: titleColor ?? Colors.black87,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      title: Text(title, style: TextStyle(fontSize: 16, color: titleColor ?? Colors.black87, fontWeight: FontWeight.w500)),
       trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
       onTap: onTap,
+    );
+  }
+  Widget _buildBrandCard(BuildContext context) {
+    return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)]),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListTile(
+            leading: const Icon(Icons.store, color: Colors.white, size: 30),
+            title: const Text("Trang Brand", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            subtitle: const Text("Quản lý sản phẩm", style: TextStyle(color: Colors.white70)),
+            trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BrandHomeScreen())),
+        ),
     );
   }
 

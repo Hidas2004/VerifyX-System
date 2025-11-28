@@ -49,6 +49,7 @@ class BatchService {
       );
 
       if (response.statusCode == 201 && response.data['success'] == true) {
+        debugPrint('✅ Tạo Batch thành công! Block: ${response.data['blockNumber']}');
         return response.data;
       } else {
         debugPrint('❌ Lỗi server trả về: ${response.data}');
@@ -74,6 +75,10 @@ class BatchService {
       return snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
+        // Đảm bảo blockchainData không bị null
+        if (data['blockchainData'] == null) {
+             data['blockchainData'] = {};
+        }
         return BatchModel.fromMap(data);
       }).toList();
       
@@ -83,7 +88,7 @@ class BatchService {
     }
   }
 
-  // --- 3. [MỚI] CẬP NHẬT TRẠNG THÁI (GỌI API NODEJS -> BLOCKCHAIN) ---
+  // --- 3. CẬP NHẬT TRẠNG THÁI (GỌI API NODEJS -> BLOCKCHAIN) ---
   Future<Map<String, dynamic>?> updateBatchStatus({
     required int blockchainId,
     required String status,
@@ -105,7 +110,7 @@ class BatchService {
       );
 
       if (response.statusCode == 201 && response.data['success'] == true) {
-        debugPrint('✅ Cập nhật Blockchain thành công! Hash: ${response.data['txHash']}');
+        debugPrint('✅ Cập nhật Blockchain thành công! Hash: ${response.data['txHash']} | Block: ${response.data['blockNumber']}');
         return response.data;
       } else {
         debugPrint('❌ Lỗi server: ${response.data}');

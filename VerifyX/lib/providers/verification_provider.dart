@@ -139,24 +139,26 @@ class VerificationProvider with ChangeNotifier {
 
   // ==================== [MỚI] LOAD BRAND LOGS ====================
 
-  Future<void> loadBrandLogs(String brandId) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
+Future<void> loadBrandLogs(String brandId) async {
+  try {
+    _isLoading = true;
+    notifyListeners();
 
-      final rawLogs = await _service.getBrandVerifications(brandId);
-      
-      // Map data sang Model
-      _brandLogs = rawLogs.map((map) => VerificationLogModel.fromMap(map)).toList();
-      
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-    }
+    // Gọi hàm từ Service của bạn
+    final rawLogs = await _service.getBrandVerifications(brandId);
+    
+    // Map dữ liệu
+    _brandLogs = rawLogs.map((map) => VerificationLogModel.fromMap(map)).toList();
+    
+    _isLoading = false;
+    notifyListeners();
+  } catch (e) {
+    _error = e.toString();
+    _isLoading = false;
+    notifyListeners();
+    print("Lỗi Load Logs: $e"); // Xem console nếu lỗi
   }
+}
   
   // ==================== UTILS ====================
   

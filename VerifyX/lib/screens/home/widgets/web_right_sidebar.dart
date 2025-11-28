@@ -6,53 +6,33 @@ class WebRightSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 300, // Chiều rộng cố định
-      // 💡 THAY ĐỔI: Chỉ padding chiều dọc, vì padding ngang đã có ở layout chính
+      width: 300,
       padding: const EdgeInsets.symmetric(vertical: 24),
-      
-      // 💡 THAY ĐỔI: Bỏ decoration (màu nền) của cả cột
-      // color: Colors.white, // XÓA DÒNG NÀY
-      // border: ... // XÓA LUÔN
-
-      // 💡 THAY ĐỔI: Dùng ListView để nội dung có thể cuộn
       child: ListView(
-        padding: const EdgeInsets.only(right: 24), // Thêm padding phải
+        padding: const EdgeInsets.only(right: 24),
         children: [
-          // 💡 THAY ĐỔI: Bọc nội dung trong Card
+          // 🟢 ĐỔI NỘI DUNG: CẢNH BÁO LỪA ĐẢO
           _buildInfoCard(
-            title: "Friend Suggestions",
+            title: "⚠️ Cảnh báo lừa đảo",
             child: Column(
               children: [
-                _buildUserTile("Julia Smith", "@juliasmith"),
-                _buildUserTile("Vermilion D. Gray", "@vermiliongray"),
-                _buildUserTile("Mai Senpai", "@maisenpai"),
-                _buildUserTile("Azunyan U. Wu", "@azunyandesu"),
+                _buildUserTile("Shop Quần Áo XYZ", "Giả mạo thương hiệu", isWarning: true),
+                _buildUserTile("Mỹ Phẩm Giá Rẻ", "Hàng không rõ nguồn gốc", isWarning: true),
+                _buildUserTile("Đại lý Vé Fake", "Lừa đảo chuyển khoản", isWarning: true),
               ],
             ),
           ),
 
           const SizedBox(height: 24),
 
-          // 💡 THAY ĐỔI: Bọc nội dung trong Card
+          // 🟢 ĐỔI NỘI DUNG: SẢN PHẨM HOT
           _buildInfoCard(
-            title: "Profile Activity",
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            title: "🔥 Sản phẩm xác thực nhiều",
+            child: Column(
               children: [
-                Text(
-                  "+1,158 Followers",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  "You gained a substantial amount of followers this month!",
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
-                )
-                // ... thêm nội dung placeholder khác
+                _buildProductTile("Nike Air Jordan 1", "2.5k lượt check"),
+                _buildProductTile("iPhone 15 Pro Max", "1.8k lượt check"),
+                _buildProductTile("Son MAC Chili", "900 lượt check"),
               ],
             ),
           ),
@@ -61,19 +41,33 @@ class WebRightSidebar extends StatelessWidget {
     );
   }
 
-  // 💡 THAY ĐỔI: Widget con để build user tile
-  Widget _buildUserTile(String name, String handle) {
+  Widget _buildUserTile(String name, String reason, {bool isWarning = false}) {
     return ListTile(
-      leading: CircleAvatar(child: Text(name.substring(0, 1))),
-      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(handle),
-      trailing:
-          Icon(Icons.add_circle_outline, color: const Color(0xFF4A4DE6)),
+      leading: CircleAvatar(
+        backgroundColor: isWarning ? Colors.red[50] : Colors.grey[100],
+        child: Icon(isWarning ? Icons.warning_amber : Icons.store, color: isWarning ? Colors.red : Colors.blue),
+      ),
+      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      subtitle: Text(reason, style: TextStyle(color: isWarning ? Colors.red[300] : Colors.grey, fontSize: 12)),
       contentPadding: EdgeInsets.zero,
+      dense: true,
     );
   }
 
-  // 💡 THAY ĐỔI: Widget helper để tạo Card giống ảnh mẫu
+  Widget _buildProductTile(String name, String checks) {
+    return ListTile(
+      leading: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+        child: const Icon(Icons.check_circle_outline, color: Colors.blue),
+      ),
+      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      subtitle: Text(checks, style: const TextStyle(fontSize: 12)),
+      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+      dense: true,
+    );
+  }
+
   Widget _buildInfoCard({required String title, required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -81,27 +75,14 @@ class WebRightSidebar extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header của Card (ví dụ: Friend Suggestions)
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
           const SizedBox(height: 16),
-          // Nội dung của Card
           child,
         ],
       ),

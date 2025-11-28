@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart'; // Để dùng Clipboard
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../providers/auth_provider.dart';
 
-/// ═══════════════════════════════════════════════════════════════════════════
-/// BRAND PROFILE PAGE - Tab thông tin tài khoản
-/// ═══════════════════════════════════════════════════════════════════════════
-/// 
-/// Tab 5 của Brand - Thông tin tài khoản và cài đặt
-/// - Thông tin Brand
-/// - Cài đặt tài khoản
-/// - Đăng xuất
-/// 
-/// ═══════════════════════════════════════════════════════════════════════════
 class BrandProfilePage extends StatefulWidget {
   const BrandProfilePage({super.key});
 
@@ -20,319 +13,171 @@ class BrandProfilePage extends StatefulWidget {
 }
 
 class _BrandProfilePageState extends State<BrandProfilePage> {
-  final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
+  // Controller form
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _taxController = TextEditingController();
+  final _addressController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Load dữ liệu user vào form
+    final user = context.read<AuthProvider>().userModel;
+    if (user != null) {
+      _emailController.text = user.email;
+      _phoneController.text = user.phoneNumber ?? "";
+      // Các trường khác nếu chưa có trong model thì để trống hoặc giả lập
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = _auth.currentUser;
+    final user = context.watch<AuthProvider>().userModel;
+    final width = MediaQuery.of(context).size.width;
+    bool isDesktop = width > 900;
 
-    if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text('Chưa đăng nhập')),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Thông tin tài khoản',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: false,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)],
+    return Container(
+      color: AppColors.adminBackground,
+      padding: const EdgeInsets.all(24),
+      child: isDesktop 
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 1, child: _buildLeftColumn(user)),
+              const SizedBox(width: 24),
+              Expanded(flex: 2, child: _buildRightColumn()),
+            ],
+          )
+        : SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildLeftColumn(user),
+                const SizedBox(height: 24),
+                _buildRightColumn(),
+              ],
             ),
           ),
-        ),
-      ),
-      body: FutureBuilder<DocumentSnapshot>(
-        future: _firestore.collection('users').doc(user.uid).get(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00BCD4)),
-              ),
-            );
-          }
-
-          if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text('Không thể tải thông tin'));
-          }
-
-          final userData = snapshot.data!.data() as Map<String, dynamic>?;
-          final displayName = userData?['displayName'] ?? 'Chưa có tên';
-          final email = userData?['email'] ?? user.email ?? 'Chưa có email';
-          final brandName = userData?['brandName'] ?? 'Chưa có tên thương hiệu';
-          final phone = userData?['phone'] ?? 'Chưa có số điện thoại';
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // Avatar và tên Brand
-              _buildProfileHeader(brandName, email),
-              
-              const SizedBox(height: 24),
-              
-              // Thông tin Brand
-              _buildSectionTitle('Thông tin Brand'),
-              _buildInfoCard([
-                _buildInfoRow(Icons.business, 'Tên thương hiệu', brandName),
-                _buildInfoRow(Icons.person, 'Người đại diện', displayName),
-                _buildInfoRow(Icons.email, 'Email', email),
-                _buildInfoRow(Icons.phone, 'Số điện thoại', phone),
-              ]),
-              
-              const SizedBox(height: 24),
-              
-              // Cài đặt
-              _buildSectionTitle('Cài đặt'),
-              _buildSettingsCard(),
-              
-              const SizedBox(height: 24),
-              
-              // Nút đăng xuất
-              _buildLogoutButton(),
-            ],
-          );
-        },
-      ),
     );
   }
 
-  /// Header với avatar và tên
-  Widget _buildProfileHeader(String brandName, String email) {
-    return Center(
+  // CỘT TRÁI: Logo & Blockchain Info
+  Widget _buildLeftColumn(dynamic user) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
-          // Avatar
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF00BCD4), Color(0xFF4DD0E1)],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.business,
-              size: 50,
-              color: Colors.white,
-            ),
+          const CircleAvatar(
+            radius: 50,
+            backgroundColor: AppColors.kpiBlue,
+            child: Icon(Icons.business, size: 50, color: Colors.white),
           ),
           const SizedBox(height: 16),
-          // Tên brand
           Text(
-            brandName,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
+            user?.displayName ?? "Tên Doanh Nghiệp",
+            style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 4),
-          // Email
-          Text(
-            email,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Tiêu đề section
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.grey[700],
-        ),
-      ),
-    );
-  }
-
-  /// Card thông tin
-  Widget _buildInfoCard(List<Widget> children) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: children,
-        ),
-      ),
-    );
-  }
-
-  /// Row thông tin
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Icon(icon, size: 24, color: const Color(0xFF00BCD4)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(20)),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                Icon(Icons.verified, size: 16, color: Colors.blue),
+                SizedBox(width: 4),
+                Text("Verified Brand", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
               ],
             ),
           ),
+          const Divider(height: 40),
+          
+          // Ví Blockchain
+          Align(alignment: Alignment.centerLeft, child: Text("Ví Blockchain:", style: GoogleFonts.inter(color: Colors.grey))),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "0x71C...b9a", // Thay bằng user.walletAddress thật
+                    style: GoogleFonts.robotoMono(fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(const ClipboardData(text: "0x71C7656EC7ab88b098defB751B7401B5f6d89b9a"));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã sao chép địa chỉ ví")));
+                  },
+                  child: const Icon(Icons.copy, size: 18, color: Colors.grey),
+                )
+              ],
+            ),
+          )
         ],
       ),
     );
   }
 
-  /// Card cài đặt
-  Widget _buildSettingsCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  // CỘT PHẢI: Form thông tin
+  Widget _buildRightColumn() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSettingsTile(
-            Icons.edit,
-            'Chỉnh sửa thông tin',
-            'Cập nhật thông tin Brand',
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Chỉnh sửa thông tin đang phát triển')),
-              );
-            },
+          Text("Thông tin chi tiết", style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
+          
+          _buildInputGroup("Email Liên hệ", _emailController, Icons.email),
+          _buildInputGroup("Số điện thoại", _phoneController, Icons.phone),
+          Row(
+            children: [
+              Expanded(child: _buildInputGroup("Mã số thuế", _taxController, Icons.assignment)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildInputGroup("Website", TextEditingController(text: "https://verifyx.com"), Icons.language)),
+            ],
           ),
-          const Divider(height: 1),
-          _buildSettingsTile(
-            Icons.lock,
-            'Đổi mật khẩu',
-            'Thay đổi mật khẩu đăng nhập',
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Đổi mật khẩu đang phát triển')),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          _buildSettingsTile(
-            Icons.notifications,
-            'Thông báo',
-            'Cài đặt thông báo',
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Cài đặt thông báo đang phát triển')),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          _buildSettingsTile(
-            Icons.help,
-            'Trợ giúp',
-            'Hướng dẫn sử dụng',
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Trợ giúp đang phát triển')),
-              );
-            },
-          ),
+          _buildInputGroup("Địa chỉ Trụ sở", _addressController, Icons.location_city),
+          
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: () {},
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.kpiBlue),
+              child: const Text("Lưu thay đổi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          )
         ],
       ),
     );
   }
 
-  /// Tile cài đặt
-  Widget _buildSettingsTile(
-    IconData icon,
-    String title,
-    String subtitle,
-    VoidCallback onTap,
-  ) {
-    return ListTile(
-      leading: Icon(icon, color: const Color(0xFF00BCD4)),
-      title: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w500),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-      ),
-      trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
-      onTap: onTap,
-    );
-  }
-
-  /// Nút đăng xuất
-  Widget _buildLogoutButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () async {
-          final confirm = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Đăng xuất'),
-              content: const Text('Bạn có chắc chắn muốn đăng xuất?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Hủy'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Đăng xuất'),
-                ),
-              ],
+  Widget _buildInputGroup(String label, TextEditingController controller, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              prefixIcon: Icon(icon, size: 20, color: Colors.grey),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
-          );
-
-          if (confirm == true && mounted) {
-            await _auth.signOut();
-          }
-        },
-        icon: const Icon(Icons.logout),
-        label: const Text('Đăng xuất'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.red[400],
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
           ),
-        ),
+        ],
       ),
     );
   }

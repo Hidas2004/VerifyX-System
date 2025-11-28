@@ -78,4 +78,9 @@ class BatchModel {
     if (date is String) return DateTime.parse(date);
     return DateTime.now();
   }
+  bool get hasBlockchainHash {
+    return blockchainData != null && 
+          blockchainData!['txHash'] != null && 
+          blockchainData!['txHash'].toString().isNotEmpty;
+  }
 }

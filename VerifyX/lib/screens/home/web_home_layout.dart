@@ -1,16 +1,8 @@
 import 'package:flutter/material.dart';
-
-// --- THÊM IMPORT (ĐÃ SỬA LỖI) ---
-// Thêm './' ở đầu để đảm bảo đường dẫn chính xác
 import './widgets/ai_chat_popup.dart';
-// --- KẾT THÚC THÊM IMPORT ---
-
-// Import 2 cột widget (file gốc của bạn)
-import './widgets/web_left_sidebar.dart';
-import './widgets/web_right_sidebar.dart';
+import './widgets/web_left_sidebar.dart'; 
 
 class WebHomeLayout extends StatefulWidget {
-  /// Nhận danh sách pages từ HomeScreen
   final List<Widget> pages;
 
   const WebHomeLayout({
@@ -23,12 +15,8 @@ class WebHomeLayout extends StatefulWidget {
 }
 
 class _WebHomeLayoutState extends State<WebHomeLayout> {
-  /// State riêng để quản lý tab nào đang được chọn trên web
   int _webCurrentIndex = 0;
-
-  // --- THÊM STATE ĐIỀU KHIỂN CHAT ---
   bool _isChatOpen = false;
-  // --- KẾT THÚC THÊM STATE ---
 
   void _onSelectPage(int index) {
     setState(() {
@@ -36,70 +24,63 @@ class _WebHomeLayoutState extends State<WebHomeLayout> {
     });
   }
 
-  // --- THÊM HÀM ĐỂ BẬT/TẮT CHAT ---
   void _toggleChat() {
     setState(() {
       _isChatOpen = !_isChatOpen;
     });
   }
-  // --- KẾT THÚC THÊM HÀM ---
 
   @override
   Widget build(BuildContext context) {
+    // SỬA: Dùng màu nền xám chuẩn Admin (#F5F7FA)
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
-
-      // --- SỬ DỤNG STACK ĐỂ CÁC WIDGET CÓ THỂ NỔI LÊN TRÊN NHAU ---
+      backgroundColor: const Color(0xFFF5F7FA), 
       body: Stack(
         children: [
-          // 1. NỘI DUNG CHÍNH (3 CỘT CỦA BẠN)
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. CỘT TRÁI (MENU)
+              // 1. SIDEBAR (Bây giờ đã là màu trắng)
               WebLeftSidebar(
                 currentIndex: _webCurrentIndex,
                 onSelectPage: _onSelectPage,
               ),
 
-              // 2. CỘT GIỮA (NỘI DUNG CHÍNH)
+              // 2. KHUNG NỘI DUNG CHÍNH
               Expanded(
-                flex: 2,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-                  child: widget.pages[_webCurrentIndex],
+                child: Center(
+                  child: Container(
+                    // Giữ nguyên max width để nội dung không bị bè
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
+                    child: widget.pages[_webCurrentIndex],
+                  ),
                 ),
               ),
-
-              // 3. CỘT PHẢI (GỢI Ý)
-              const WebRightSidebar(),
             ],
           ),
 
-          // 2. HỘP CHAT POP-UP (NẾU MỞ)
-          // Nó sẽ nổi ở góc dưới bên phải
+          // 3. AI CHAT POPUP
           if (_isChatOpen)
             Positioned(
-              bottom: 90, // Cách đáy 90px (để hở nút FAB)
-              right: 24, // Cách phải 24px
-              child: AiChatPopup(
-                onClose: _toggleChat, // Truyền hàm đóng vào
-              ),
+              bottom: 90,
+              right: 24,
+              child: AiChatPopup(onClose: _toggleChat),
             ),
         ],
       ),
 
-      // --- THÊM NÚT BẤM CHAT NỔI ---
+      // 4. FAB Button
       floatingActionButton: FloatingActionButton(
         onPressed: _toggleChat,
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: const Color(0xFF4A4DE6), // Màu xanh Brand
+        elevation: 4,
         tooltip: 'Chat với trợ lý AI',
         child: Icon(
           _isChatOpen ? Icons.close : Icons.chat_bubble_outline_rounded,
           color: Colors.white,
         ),
       ),
-      // --- KẾT THÚC THÊM NÚT BẤM ---
     );
   }
 }

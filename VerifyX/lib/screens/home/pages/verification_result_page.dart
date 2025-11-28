@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
-import 'dart:math' as math; // Để vẽ hình lục giác
+import 'dart:math' as math; 
 
 class VerificationResultPage extends StatelessWidget {
   final bool isAuthentic;
@@ -28,219 +28,266 @@ class VerificationResultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // MÀU SẮC CHUẨN THEO ẢNH (Light Tech)
-    final Color cyanColor = const Color(0xFF00E5FF); // Màu xanh lơ (Chủ đạo)
-    final Color greenColor = const Color(0xFF00E676); // Màu xanh lá (Thành công)
-    final Color bgLight = const Color(0xFFF5F9FC);   // Nền trắng hơi xanh nhẹ
+    final Color cyanColor = const Color(0xFF00E5FF);
+    final Color greenColor = const Color(0xFF00E676);
 
-    // Sắp xếp
-    if (isAuthentic && history.isNotEmpty) {
-      history.sort((a, b) {
-        int p1 = _getStatusPriority(a['status'] ?? '');
-        int p2 = _getStatusPriority(b['status'] ?? '');
-        if (p1 != p2) return p1.compareTo(p2);
-        int t1 = _parseTimestamp(a['timestamp']);
-        int t2 = _parseTimestamp(b['timestamp']);
-        return t1.compareTo(t2);
+    // --- [LOGIC ĐỒNG BỘ DỮ LIỆU] ---
+    // 1. Xác định ngày NSX chuẩn (Lấy từ ProductInfo hoặc mặc định là NOW)
+    DateTime mfgDate = DateTime.now();
+    if (productInfo != null && productInfo!['manufacturingDate'] != null) {
+      try {
+        mfgDate = DateTime.parse(productInfo!['manufacturingDate'].toString());
+      } catch (_) {}
+    }
+
+    // 2. Clone lịch sử để xử lý
+    List<dynamic> displayHistory = List.from(history);
+
+    if (isAuthentic) {
+      // 3. [FIX LOGIC] Tìm bước "Sản xuất" và ép thời gian trùng với NSX ở trên header
+      // Để tránh tình trạng: Header ghi ngày 26/11 mà Timeline ghi ngày 01/01
+      for (var i = 0; i < displayHistory.length; i++) {
+        String status = displayHistory[i]['status'] ?? '';
+        if (status.contains("Khoi tao") || status.contains("San xuat")) {
+           // Gán lại timestamp bằng mfgDate
+           displayHistory[i] = Map<String, dynamic>.from(displayHistory[i]);
+           displayHistory[i]['timestamp'] = mfgDate.millisecondsSinceEpoch;
+        }
+      }
+
+      // 4. Sắp xếp lại
+      if (displayHistory.isNotEmpty) {
+        displayHistory.sort((a, b) {
+          int p1 = _getStatusPriority(a['status'] ?? '');
+          int p2 = _getStatusPriority(b['status'] ?? '');
+          if (p1 != p2) return p1.compareTo(p2);
+          int t1 = _parseTimestamp(a['timestamp']);
+          int t2 = _parseTimestamp(b['timestamp']);
+          return t1.compareTo(t2);
+        });
+      }
+
+      // 5. Thêm bước "Xác thực bởi Bạn" vào cuối
+      displayHistory.add({
+        'status': 'Xác thực bởi Bạn',
+        'location': 'Đã quét & xác thực thành công',
+        'timestamp': DateTime.now().millisecondsSinceEpoch, 
+        'isUserAction': true, 
+        'txHash': 'Live Verification'
       });
     }
 
     return Scaffold(
-      backgroundColor: bgLight, // Nền sáng
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
+        iconTheme: const IconThemeData(color: Colors.black),
+        title: const Text("Kết quả xác thực", style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
         centerTitle: true,
-        title: Text("VERIFYX BLOCKCHAIN", style: TextStyle(color: cyanColor, letterSpacing: 2, fontSize: 14, fontWeight: FontWeight.bold)),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  // --- 1. HEADER "BLOCKCHAIN VERIFIED" (KHUNG CYAN SÁNG) ---
-                  _buildTechHeader(isAuthentic, cyanColor, greenColor),
-
-                  const SizedBox(height: 24),
-
-                  // --- 2. THÔNG TIN SẢN PHẨM (CARD TRẮNG ĐỔ BÓNG) ---
-                  if (isAuthentic && productInfo != null)
-                    _buildProductCard(productInfo!, batchId, cyanColor),
-
-                  const SizedBox(height: 24),
-
-                  // --- 3. TIMELINE (STYLE LỤC GIÁC) ---
-                  if (!isAuthentic || history.isEmpty)
-                    _buildEmptyState()
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: history.length,
-                      itemBuilder: (context, index) {
-                        return _buildTimelineItem(
-                          context, 
-                          history[index], 
-                          index == 0, 
-                          index == history.length - 1,
-                          cyanColor,
-                          greenColor
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-          // --- 4. FOOTER BUTTONS ---
-          _buildFooter(context, cyanColor),
-        ],
-      ),
-    );
-  }
-
-  // --- WIDGET: HEADER GIỐNG ẢNH ---
-  Widget _buildTechHeader(bool isAuthentic, Color cyan, Color green) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cyan.withOpacity(0.3), width: 2), // Viền xanh nhẹ
-        boxShadow: [
-          BoxShadow(color: cyan.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 5)),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Icon Ổ khóa trong khung phát sáng
-          Container(
-            padding: const EdgeInsets.all(12),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 700),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: green, width: 2),
-              boxShadow: [BoxShadow(color: green.withOpacity(0.2), blurRadius: 15)],
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 30, offset: const Offset(0, 10)),
+              ],
             ),
-            child: Icon(isAuthentic ? Icons.lock_outline : Icons.gpp_bad, size: 40, color: green),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "BLOCKCHAIN VERIFIED",
-            style: TextStyle(
-              color: cyan,
-              fontSize: 22,
-              fontWeight: FontWeight.w900, // Font đậm
-              letterSpacing: 1.0,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            "Dữ liệu khớp hoàn toàn với Blockchain",
-            style: TextStyle(color: Colors.grey, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- WIDGET: CARD SẢN PHẨM ---
-  Widget _buildProductCard(Map<String, dynamic> info, String batchId, Color accent) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Ảnh (Bo góc)
-          Container(
-            width: 90, height: 90,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.grey[100],
-              image: info['imageUrl'] != null && info['imageUrl'].isNotEmpty
-                  ? DecorationImage(image: NetworkImage(info['imageUrl']), fit: BoxFit.cover)
-                  : null,
-            ),
-            child: info['imageUrl'] == null ? const Icon(Icons.image, color: Colors.grey) : null,
-          ),
-          const SizedBox(width: 16),
-          // Info
-          Expanded(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  info['name'] ?? "Unknown",
-                  style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                _buildDateRow(Icons.calendar_today, "NSX: ", info['manufacturingDate']),
-                const SizedBox(height: 4),
-                _buildDateRow(Icons.event_busy, "HSD: ", info['expiryDate'], isExpiry: true),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: accent.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text("Batch ID: $batchId", style: TextStyle(color: accent.withOpacity(0.8), fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
+                _buildTechHeader(isAuthentic, cyanColor, greenColor),
+
+                const SizedBox(height: 32),
+                const Divider(),
+                const SizedBox(height: 32),
+
+                if (isAuthentic && productInfo != null)
+                  _buildProductInfoSimple(productInfo!, batchId, mfgDate), // Truyền mfgDate chuẩn vào
+
+                const SizedBox(height: 32),
+                
+                Align(alignment: Alignment.centerLeft, child: Text("HÀNH TRÌNH SẢN PHẨM", style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, letterSpacing: 1.2))),
+                const SizedBox(height: 16),
+                
+                if (!isAuthentic)
+                   const Padding(
+                     padding: EdgeInsets.all(20),
+                     child: Text("Sản phẩm này không tồn tại trên hệ thống Blockchain.", style: TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                   )
+                else
+                   ListView.builder(
+                     shrinkWrap: true,
+                     physics: const NeverScrollableScrollPhysics(),
+                     itemCount: displayHistory.length,
+                     itemBuilder: (context, index) {
+                       return _buildTimelineItem(context, displayHistory[index], index == 0, index == displayHistory.length - 1, cyanColor, greenColor);
+                     },
+                   ),
+                   
+                 const SizedBox(height: 32),
+                 SizedBox(
+                   width: double.infinity,
+                   height: 50,
+                   child: ElevatedButton(
+                       onPressed: () => Navigator.pop(context),
+                       style: ElevatedButton.styleFrom(
+                           backgroundColor: Colors.black87,
+                           foregroundColor: Colors.white,
+                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                       ),
+                       child: const Text("Hoàn tất"),
+                   ),
+                 )
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // --- WIDGET: TIMELINE ITEM (STYLE LỤC GIÁC NHƯ ẢNH) ---
+  Widget _buildTechHeader(bool isAuthentic, Color cyan, Color green) {
+      return Column(
+          children: [
+              Text(
+                isAuthentic ? "XÁC THỰC THÀNH\nCÔNG" : "CẢNH BÁO GIẢ MẠO",
+                style: TextStyle(
+                    fontSize: 22, 
+                    fontWeight: FontWeight.w900, 
+                    color: isAuthentic ? Colors.black87 : Colors.red,
+                    letterSpacing: 1.0
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                      color: isAuthentic ? green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20)
+                  ),
+                  child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                          Icon(isAuthentic ? Icons.check_circle : Icons.warning, size: 18, color: isAuthentic ? green : Colors.red),
+                          const SizedBox(width: 8),
+                          Text(
+                              isAuthentic ? "Verified by Blockchain" : "Unknown Source",
+                              style: TextStyle(color: isAuthentic ? green : Colors.red, fontWeight: FontWeight.bold)
+                          )
+                      ],
+                  ),
+              )
+          ],
+      );
+  }
+
+  // Nhận thêm tham số mfgDate chuẩn từ bên ngoài
+  Widget _buildProductInfoSimple(Map<String, dynamic> info, String batchId, DateTime mfgDate) {
+      // Logic HSD: NSX + 2 năm (Nếu HSD null)
+      DateTime expDate;
+      if (info['expiryDate'] != null) {
+         try { expDate = DateTime.parse(info['expiryDate'].toString()); } catch (_) { expDate = mfgDate.add(const Duration(days: 730)); }
+      } else {
+         expDate = mfgDate.add(const Duration(days: 730));
+      }
+
+      String mfgDateStr = DateFormat('dd/MM/yyyy').format(mfgDate);
+      String expDateStr = DateFormat('dd/MM/yyyy').format(expDate);
+
+      return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+              Container(
+                  width: 90, height: 90,
+                  decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                      image: info['imageUrl'] != null && info['imageUrl'].isNotEmpty 
+                        ? DecorationImage(image: NetworkImage(info['imageUrl']), fit: BoxFit.cover) 
+                        : null
+                  ),
+                  child: info['imageUrl'] == null || info['imageUrl'].isEmpty ? const Icon(Icons.image, color: Colors.grey, size: 30) : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                          Text(info['name'] ?? "Sản phẩm Demo", 
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            maxLines: 2, overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Text("Batch ID: $batchId", style: const TextStyle(fontFamily: 'monospace', color: Colors.grey, fontSize: 12)),
+                          const SizedBox(height: 10),
+                          
+                          Wrap(
+                              spacing: 8.0, 
+                              runSpacing: 8.0, 
+                              children: [
+                                  _buildInfoTag("NSX: $mfgDateStr", Colors.blue),
+                                  _buildInfoTag("HSD: $expDateStr", Colors.orange),
+                              ],
+                          )
+                      ],
+                  ),
+              )
+          ],
+      );
+  }
+
+  Widget _buildInfoTag(String text, Color color) {
+      return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            border: Border.all(color: color.withOpacity(0.3)), 
+            borderRadius: BorderRadius.circular(4)
+          ),
+          child: Text(text, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+      );
+  }
+
   Widget _buildTimelineItem(BuildContext context, Map<String, dynamic> record, bool isFirst, bool isLast, Color cyan, Color green) {
     String status = record['status'] ?? 'N/A';
     String location = record['location'] ?? 'Unknown';
-    String txHash = _getOrGenerateHash(record);
+    bool isUserAction = record['isUserAction'] == true; 
+    String txHash = isUserAction ? "Confirmed by Device" : _getOrGenerateHash(record);
     
     Color glowColor = Colors.grey;
     IconData iconData = Icons.circle;
 
-    if (status.contains("Khoi tao") || status.contains("San xuat")) {
+    if (isUserAction) {
+       iconData = Icons.person_pin_circle; glowColor = Colors.blueAccent; location = "Đã quét & xác thực thành công";
+    } else if (status.contains("Khoi tao") || status.contains("San xuat")) {
       iconData = Icons.factory; glowColor = cyan; status = "Sản xuất tại Nhà máy";
     } else if (status.contains("Dai ly") || status.contains("Nhap kho")) {
       iconData = Icons.store; glowColor = Colors.purpleAccent; status = "Đã nhập kho Đại lý";
     } else if (status.contains("Hoan tat") || status.contains("Tieu dung")) {
       iconData = Icons.check_circle; glowColor = green; status = "Đến tay người tiêu dùng";
     } else {
-      iconData = Icons.local_shipping; glowColor = Colors.orangeAccent; // Vận chuyển
+      iconData = Icons.local_shipping; glowColor = Colors.orangeAccent;
     }
 
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cột Trục (Line Cyan)
           SizedBox(
             width: 50,
             child: Column(
               children: [
                 Expanded(flex: 0, child: Container(width: 2, height: 20, color: isFirst ? Colors.transparent : cyan.withOpacity(0.3))),
-                // ICON LỤC GIÁC (Hexagon)
                 CustomPaint(
-                  painter: HexagonPainter(color: glowColor, isFilled: false),
-                  child: Container(
-                    width: 40, height: 40,
-                    alignment: Alignment.center,
-                    child: Icon(iconData, size: 18, color: glowColor),
-                  ),
+                  painter: HexagonPainter(color: glowColor, isFilled: isUserAction), 
+                  child: Container(width: 40, height: 40, alignment: Alignment.center, child: Icon(iconData, size: 18, color: isUserAction ? Colors.white : glowColor)),
                 ),
                 Expanded(child: Container(width: 2, color: isLast ? Colors.transparent : cyan.withOpacity(0.3))),
               ],
@@ -248,43 +295,66 @@ class VerificationResultPage extends StatelessWidget {
           ),
           const SizedBox(width: 12),
 
-          // Cột Nội dung (Card ngang màu nhạt)
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 24.0),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [glowColor.withOpacity(0.05), Colors.white]), // Gradient nhẹ
-                  border: Border.all(color: glowColor.withOpacity(0.3)),
+                  color: isUserAction ? Colors.blue.withOpacity(0.05) : Colors.white, 
+                  border: Border.all(color: isUserAction ? Colors.blue.withOpacity(0.3) : glowColor.withOpacity(0.3)),
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: isUserAction ? [] : [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 5)],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(status, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 15)),
-                    const SizedBox(height: 2),
-                    Text(location, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(status, 
+                            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14),
+                            overflow: TextOverflow.ellipsis, 
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          // Format timestamp thành giờ phút ngày tháng
+                          DateFormat('HH:mm dd/MM').format(DateTime.fromMillisecondsSinceEpoch(_parseTimestamp(record['timestamp']))),
+                          style: TextStyle(fontSize: 10, color: Colors.grey[500])
+                        )
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(location, style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    
                     const SizedBox(height: 8),
-                    // Hash Pill
-                    InkWell(
+                    isUserAction 
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                        child: const Text("✓ Tin cậy tuyệt đối", style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                      )
+                    : InkWell(
                       onTap: () {
                         Clipboard.setData(ClipboardData(text: txHash));
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã copy Hash!")));
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: cyan.withOpacity(0.3)),
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey[300]!)),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.fingerprint, size: 12, color: cyan),
+                            Icon(Icons.link, size: 12, color: Colors.grey[600]),
                             const SizedBox(width: 6),
-                            Text("Tx: ${_shortenHash(txHash)}", style: TextStyle(color: cyan, fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.bold)),
+                            Flexible(
+                                child: Text("Tx: ${_shortenHash(txHash)}", 
+                                    style: TextStyle(color: Colors.grey[600], fontFamily: 'monospace', fontSize: 11),
+                                    overflow: TextOverflow.ellipsis,
+                                )
+                            ),
                           ],
                         ),
                       ),
@@ -299,74 +369,11 @@ class VerificationResultPage extends StatelessWidget {
     );
   }
 
-  // --- FOOTER (GIỐNG ẢNH) ---
-  Widget _buildFooter(BuildContext context, Color cyan) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.black12)),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: cyan),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.only(topLeft: Radius.circular(20), bottomLeft: Radius.circular(20))),
-              ),
-              child: Text("BÁO CÁO", style: TextStyle(color: cyan, letterSpacing: 1, fontWeight: FontWeight.bold)),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cyan.withOpacity(0.1),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                elevation: 0,
-               side: BorderSide(color: cyan), // 1. Khai báo viền ở đây
-              shape: const RoundedRectangleBorder( // 2. Khai báo hình dáng ở đây
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(20), 
-                  bottomRight: Radius.circular(20)
-                ),
-              ),
-              ),
-              child: Text("HOÀN TẤT", style: TextStyle(color: cyan, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- HELPERS ---
-  Widget _buildDateRow(IconData icon, String label, dynamic dateVal, {bool isExpiry = false}) {
-    String dateStr = "---";
-    if (dateVal != null) {
-      try {
-        DateTime dt;
-        if (dateVal is int) { dt = DateTime.fromMillisecondsSinceEpoch(dateVal); }
-        else if (dateVal is String) { dt = DateTime.parse(dateVal); }
-        else { dt = (dateVal as dynamic).toDate(); }
-        dateStr = DateFormat('dd/MM/yyyy').format(dt);
-      } catch (_) {}
-    }
-    return Row(children: [Icon(icon, size: 14, color: isExpiry ? Colors.red : Colors.grey), const SizedBox(width: 6), Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)), Text(dateStr, style: TextStyle(color: isExpiry ? Colors.red : Colors.black87, fontWeight: FontWeight.w600, fontSize: 13))]);
-  }
-
-  Widget _buildEmptyState() => const Center(child: Text("No Data"));
   int _parseTimestamp(dynamic input) { if (input == null) return 0; if (input is int) return input; if (input is String) return int.tryParse(input) ?? 0; return 0; }
   String _getOrGenerateHash(Map<String, dynamic> record) { if (record['txHash'] != null && record['txHash'].toString().isNotEmpty) return record['txHash']; int seed = (record['timestamp'].toString() + record['status'].toString()).hashCode; return "0x${seed.abs().toRadixString(16)}...b9a1"; }
-  String _shortenHash(String hash) => hash.length < 12 ? hash : "${hash.substring(0, 6)}...${hash.substring(hash.length - 6)}";
+  String _shortenHash(String hash) => hash.length < 12 ? hash : "${hash.substring(0, 5)}...${hash.substring(hash.length - 4)}";
 }
 
-// --- PAINTER VẼ HÌNH LỤC GIÁC (QUAN TRỌNG ĐỂ GIỐNG ẢNH) ---
 class HexagonPainter extends CustomPainter {
   final Color color;
   final bool isFilled;
@@ -390,5 +397,3 @@ class HexagonPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-// Extension để cộng Shape (cho nút bấm)
-extension ShapeAdd on OutlinedBorder { OutlinedBorder operator +(OutlinedBorder other) => this; } // Dummy workaround

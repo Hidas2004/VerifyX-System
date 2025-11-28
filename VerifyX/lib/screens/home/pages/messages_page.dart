@@ -1,13 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../../../core/constants/constants.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/chat_provider.dart';
 import '../../../utils/formatters.dart';
 import '../../../models/chat_message_model.dart';
 
-/// Consumer chat page where users talk directly with the admin team.
 class MessagesPage extends StatefulWidget {
   const MessagesPage({super.key});
 
@@ -18,28 +16,14 @@ class MessagesPage extends StatefulWidget {
 class _MessagesPageState extends State<MessagesPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  late final VoidCallback _scrollListener;
-  int _lastMessageCount = 0;
-  bool _shouldStickToBottom = true;
-
+  
   @override
   void initState() {
     super.initState();
-    _scrollListener = () {
-      if (!_scrollController.hasClients) {
-        return;
-      }
-      final maxScroll = _scrollController.position.maxScrollExtent;
-      final currentScroll = _scrollController.position.pixels;
-      _shouldStickToBottom = (maxScroll - currentScroll) <= 120;
-    };
-    _scrollController.addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<AuthProvider>();
-      final user = authProvider.userModel;
-      if (user != null) {
-        final chatProvider = context.read<ChatProvider>();
-        chatProvider.listenToMessages(user.uid);
+      if (authProvider.userModel != null) {
+        context.read<ChatProvider>().listenToMessages(authProvider.userModel!.uid);
       }
     });
   }
@@ -47,295 +31,183 @@ class _MessagesPageState extends State<MessagesPage> {
   @override
   void dispose() {
     context.read<ChatProvider>().stopListeningMessages();
-    _scrollController.removeListener(_scrollListener);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleSend(
-    ChatProvider chatProvider,
-    AuthProvider authProvider,
-  ) async {
+  Future<void> _handleSend(ChatProvider chatProvider, AuthProvider authProvider) async {
     final user = authProvider.userModel;
     final text = _messageController.text;
-
-    if (user == null || text.trim().isEmpty) {
-      return;
-    }
-
+    if (user == null || text.trim().isEmpty) return;
     await chatProvider.sendConsumerMessage(consumer: user, message: text);
-    FocusScope.of(context).unfocus();
     _messageController.clear();
-    _scrollToBottom();
-  }
-
-  void _scrollToBottom() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) {
-        return;
-      }
+    // Tự động cuộn xuống cuối khi gửi
+    if (_scrollController.hasClients) {
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
+        _scrollController.position.maxScrollExtent + 50,
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
-    });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb) return _buildWebLayout(context);
+    return _buildMobileLayout(context);
+  }
+
+  // --- MOBILE LAYOUT ---
+  Widget _buildMobileLayout(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.userModel;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF2F4F8), // Màu nền xám xanh nhạt hiện đại
       appBar: AppBar(
-        title: const Text(AppStrings.supportChatTitle),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+        title: const Column(
+          children: [
+            Text("Hỗ trợ VerifyX", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 18)),
+            Text("Thường phản hồi trong 5 phút", style: TextStyle(fontWeight: FontWeight.normal, color: Colors.green, fontSize: 12)),
+          ],
         ),
+        backgroundColor: Colors.white,
+        elevation: 1,
+        shadowColor: Colors.black.withOpacity(0.1),
+        centerTitle: true,
+        leading: const SizedBox(), // Ẩn nút back nếu nằm trong tabbar
       ),
       body: user == null
-          ? _buildUnauthenticatedState(context)
-          : Consumer<ChatProvider>(
-              builder: (context, chatProvider, _) {
-                final messages = chatProvider.messages;
-
-                if (chatProvider.isLoadingMessages && messages.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final hasUnreadFromAdmin = messages.any(
-                  (message) => message.isFromAdmin && !message.isReadByUser,
-                );
-
-                if (hasUnreadFromAdmin) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    chatProvider.markConversationReadByConsumer(user.uid);
-                  });
-                }
-
-                if (messages.isEmpty) {
-                  _lastMessageCount = 0;
-                } else if (messages.length != _lastMessageCount &&
-                    _shouldStickToBottom) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _scrollToBottom();
-                  });
-                }
-                _lastMessageCount = messages.length;
-
-                return Column(
-                  children: [
-                    Expanded(
-                      child: messages.isEmpty
-                          ? _buildEmptyState(context)
-                          : ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                              itemCount: messages.length,
-                              itemBuilder: (context, index) {
-                                final message = messages[index];
-                                final isMine = message.senderId == user.uid;
-                                return _MessageBubble(
-                                  message: message,
-                                  isMine: isMine,
-                                );
-                              },
-                            ),
-                    ),
-                    if (chatProvider.errorMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          chatProvider.errorMessage!,
-                          style: TextStyle(
-                            color: AppColors.error.withOpacity(0.9),
-                          ),
-                        ),
-                      ),
-                    SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _messageController,
-                                textCapitalization:
-                                    TextCapitalization.sentences,
-                                minLines: 1,
-                                maxLines: 5,
-                                decoration: InputDecoration(
-                                  hintText: AppStrings.chatInputHint,
-                                  filled: true,
-                                  fillColor: Colors.grey[100],
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            FilledButton(
-                              onPressed: chatProvider.isSending
-                                  ? null
-                                  : () =>
-                                        _handleSend(chatProvider, authProvider),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                shape: const CircleBorder(),
-                                padding: const EdgeInsets.all(14),
-                              ),
-                              child: chatProvider.isSending
-                                  ? const SizedBox(
-                                      height: 18,
-                                      width: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    )
-                                  : const Icon(Icons.send, color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
+          ? const Center(child: Text("Vui lòng đăng nhập để chat"))
+          : Column(
+              children: [
+                Expanded(
+                  child: Consumer<ChatProvider>(
+                    builder: (context, chatProvider, _) {
+                      final messages = chatProvider.messages;
+                      return ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          return _MessageBubble(message: msg, isMine: msg.senderId == user.uid);
+                        },
+                      );
+                    },
+                  ),
+                ),
+                _buildInputArea(context, authProvider),
+              ],
             ),
     );
   }
 
-  Widget _buildUnauthenticatedState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.lock_outline, size: 90, color: Colors.grey[300]),
-            const SizedBox(height: 24),
-            Text(
-              'Vui lòng đăng nhập để sử dụng tính năng chat',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w600,
+  Widget _buildInputArea(BuildContext context, AuthProvider authProvider) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 30),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _messageController,
+              onSubmitted: (_) => _handleSend(context.read<ChatProvider>(), authProvider),
+              decoration: InputDecoration(
+                hintText: "Nhập tin nhắn...",
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
+                filled: true,
+                fillColor: const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                isDense: true,
               ),
-              textAlign: TextAlign.center,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          
+          // Nút gửi đổi sang màu xanh đậm luôn cho đồng bộ
+          Material(
+            color: Colors.blue[700], 
+            shape: const CircleBorder(),
+            child: InkWell(
+              onTap: () => _handleSend(context.read<ChatProvider>(), authProvider),
+              customBorder: const CircleBorder(),
+              child: const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(Icons.send_rounded, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.chat_bubble_outline, size: 96, color: AppColors.divider),
-            SizedBox(height: 24),
-            Text(
-              AppStrings.chatEmptyTitle,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            SizedBox(height: 12),
-            Text(
-              AppStrings.chatEmptySubtitle,
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
+  
+  Widget _buildWebLayout(BuildContext context) {
+     return const Scaffold(body: Center(child: Text("Web Layout"))); 
   }
 }
 
+// --- TINH CHỈNH BONG BÓNG CHAT ---
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message, required this.isMine});
-
   final ChatMessage message;
   final bool isMine;
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isMine ? AppColors.primary : Colors.grey.shade200;
-    final textColor = isMine ? Colors.white : AppColors.textPrimary;
-    final alignment = isMine ? Alignment.centerRight : Alignment.centerLeft;
-    final nameColor = isMine ? Colors.white70 : AppColors.textSecondary;
+    // Màu sắc chuyên nghiệp hơn
+    // - Tin nhắn của tôi: Blue 700 (Đậm đà, tin cậy)
+    // - Tin nhắn người khác: Trắng (Sạch sẽ)
+    final bubbleColor = isMine ? Colors.blue[700] : Colors.white;
+    final textColor = isMine ? Colors.white : Colors.black87;
 
     return Align(
-      alignment: alignment,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        decoration: BoxDecoration(
+          color: bubbleColor,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(isMine ? 20 : 4),
+            bottomRight: Radius.circular(isMine ? 4 : 20),
+          ),
+          // Thêm bóng nhẹ cho tin nhắn người khác để nổi trên nền xám
+          boxShadow: !isMine 
+            ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))]
+            : null,
         ),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: bubbleColor,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(18),
-              topRight: const Radius.circular(18),
-              bottomLeft: Radius.circular(isMine ? 18 : 6),
-              bottomRight: Radius.circular(isMine ? 6 : 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message.text,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 15,
+                height: 1.4,
+                fontWeight: FontWeight.w400,
+              ),
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: isMine
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            children: [
-              if (!isMine)
-                Text(
-                  message.senderName,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: nameColor,
-                  ),
-                ),
-              if (!isMine) const SizedBox(height: 4),
-              Text(
-                message.text,
-                style: TextStyle(color: textColor, fontSize: 15),
+            const SizedBox(height: 4),
+            Text(
+              Formatters.time(message.timestamp),
+              style: TextStyle(
+                // Chữ thời gian mờ đi một chút
+                color: isMine ? Colors.white.withOpacity(0.7) : Colors.grey[400],
+                fontSize: 11,
               ),
-              const SizedBox(height: 6),
-              Text(
-                Formatters.time(message.timestamp),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isMine ? Colors.white70 : Colors.grey[500],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
